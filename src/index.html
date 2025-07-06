@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three":          "../node_modules/three/build/three.module.js",
+            "three/addons/":  "../node_modules/three/examples/jsm/",
+            "bezier-easing":  "../node_modules/bezier-easing/dist/bezier-easing.js"
+        }
+    }
+    </script>
+
+</head>
+<body>
+    <h1>Goballs Main Warden</h1>
+    <p>This is a simple HTML page to test the goballs_main_warden module.</p>
+
+    <cell width="500px" height="500px">
+        <Mesh class="ass" id="dumb" onmouseover="hover_test(event)" onclick="click_test(event)">
+            <Mesh><Mesh></Mesh></Mesh>
+        </Mesh>
+    </cell>
+
+    <button id="move_cube_test_button" onclick="test_shit_out()">Move Cube : </button>
+    <input type="number"  id="cube_to_offset_by" value="2">
+    <button id="change_cube_color" onclick="test_shit_out2()">Change Cube's Color : </button>
+    <input type="number"  id="Rcolor_to_change_cubes_color1" value="0">
+    <input type="number"  id="Gcolor_to_change_cubes_color2" value="0">
+    <input type="number"  id="Bcolor_to_change_cubes_color3" value="0">
+
+
+    <script>
+        function test_shit_out() {
+            document.getElementById("dumb").style.setProperty('--position-x',document.getElementById("cube_to_offset_by").value);
+        }
+        function test_shit_out2() {
+            document.getElementById("dumb").style.setProperty(
+
+                '--material-color',`(${document.getElementById("Rcolor_to_change_cubes_color1").value}, ${document.getElementById("Gcolor_to_change_cubes_color2").value},${document.getElementById("Bcolor_to_change_cubes_color3").value})`
+            
+            );
+        }
+        function hover_test(event) {
+            //console.log("Testing Testing... MIC DROP : " , event.target3d);
+        }
+        function click_test(event) {
+            //console.log("Testing Testing... MIC KICK : " , event.targetCell);
+            console.log(new event.target3d.position.constructor());
+        }
+    </script>
+    <script type = "module" src="./module/main.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>
