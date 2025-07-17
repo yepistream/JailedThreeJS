@@ -7,7 +7,7 @@ import { default_onCellClick_method, default_onCellPointerMove_method } from './
 
 
 export default class Cell {
-  constructor(cellElm, renderer, scene, camera, _MainAnimMethod = null) {
+  constructor(cellElm, renderer, scene, camera = null, _MainAnimMethod = null) {
     this.cellElm       = cellElm;
     this.threeRenderer = renderer;
     this.loadedScene   = scene;
@@ -21,10 +21,13 @@ export default class Cell {
     this.updateFunds = [];
 
     this._last_cast_caught = null;
+    
+    // * Load The Scene
+      
 
     this._head_count(this.loadedScene, cellElm);
 
-    
+    this._lastHitPosition = null;
 
     cellElm.addEventListener('mousemove',(event)=>{
       default_onCellPointerMove_method(event,this);
@@ -44,10 +47,18 @@ export default class Cell {
       {
         case 'childList':
 
-          console.log("ass");
           mutation.addedNodes.forEach(node => {
             if(node.nodeType === Node.ELEMENT_NODE){
-              this._head_count(this._allConvictsByDom.get(node.parentElement));
+              if(this._allConvictsByDom.has(node.parentElement)){
+              this._head_count(this._allConvictsByDom.get(node.parentElement))
+                paintConvict(mutation.target,this);
+              }
+              else{
+                this._head_count(this.loadedScene,cellElm);
+                paintConvict(mutation.target.lastChild,this);
+                
+              }
+              console.log(this);
             }
           });
 
@@ -61,9 +72,7 @@ export default class Cell {
           break;
           
           case 'attributes':
-          
             paintConvict(mutation.target,this);
-            
             break;
       }
       
@@ -101,12 +110,12 @@ export default class Cell {
         this.threeRenderer.setSize(width * dpr, height * dpr);
         if (this.focusedCamera.isPerspectiveCamera) {
           this.focusedCamera.aspect = width / height;
-          this.focusedCamera.updateProjectionMatrix();
         }
+        this.focusedCamera.updateProjectionMatrix();
       }
     });
     this._resizeObserver.observe(this.cellElm);
-
+    console.log(this.focusedCamera);
     this._anim();
   }
 
@@ -115,7 +124,7 @@ export default class Cell {
     const parentElm_t = parentElm ? parentElm : owl.userData.domEl;
     // IF THERE IS NO PARENT, USE LOADED SCENE.
     for (let domEl of parentElm_t.children) {
-      if(this._allConvictsByDom.get(domEl)){
+      if(this._allConvictsByDom.has(domEl)){
         continue;
       }
       // TODO : Add Child Element True Parsing.
@@ -128,8 +137,33 @@ export default class Cell {
   
       // Generic instantiation
       const instance = new Ctor();
+
+      // (IF) Camera Instantation
+      if(domEl.tagName.includes("CAMERA") && domEl.hasAttribute("active")) {
+        const rect = this.cellElm.getBoundingClientRect();
+        const aspect = rect.width / rect.height;
+        if(domEl.tagName == "PERSPECTIVECAMERA"){
+          instance.fov = 75;
+          instance.aspect = aspect
+          instance.far = 1000;
+          instance.near = 0.1;
+        }
+        else{
+          const frustumSize = 20;
+          instance.left = (-frustumSize * aspect) / 2;
+          instance.right = (frustumSize * aspect) / 2;
+          instance.top = frustumSize / 2;
+          instance.bottom = -frustumSize / 2;
+        }
+        if(domEl.hasAttribute("active")) this.focusedCamera = instance;
+        this.focusedCamera.updateProjectionMatrix();
+        this.threeRenderer.setSize(rect.width, rect.height);
+        this.threeRenderer.setPixelRatio(window.devicePixelRatio);
+      }
+
       instance.userData.domEl = domEl;
       instance.userData.extraParams = [];
+      instance.transition = null;
       owl.add(instance);
 
       if (domEl.id) {

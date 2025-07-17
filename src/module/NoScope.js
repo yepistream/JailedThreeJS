@@ -2,68 +2,97 @@ import * as THREE from '../../node_modules/three/build/three.module.js';
 import { paintConvict, paintExtraCell, paintSpecificMuse } from './artist.js';
 import { fastRemove_arry } from './utils.js';
 
+/* ------------------------------------------------------------------ */
+/*  Single shared raycaster & pointer (perf)                          */
+/* ------------------------------------------------------------------ */
+const raycaster  = new THREE.Raycaster();
+const ndcPointer = new THREE.Vector2();
 
-/*
-    TODO :
-    //// First Thing First : Every Cell Will Contain A Hover And Click Element (Added in Cell.JS) that will run the Next Functions :
-    ////   RayCaster Check's If it Hit Anything ---> Changes Both Name And userData.DomId To Contain a :hover -- MutantObserver Checks For Style Attribute Update --> Update Thru _apply_rules.
-    ////   If Raycaster is Hovering Over An Object ---> On Click Event Changes Both Name and userData.domID to Contain :click(-ing/(retard-)-ed) -- Same Shit --> Updates Thru _apply_rules 
-    //// Implement Compatibility With Calls To Native Event Listeners For Mouse/Pointer Movmenet And Actions.
-*/
+raycaster.layers.set(1);
 
-
-
-export function default_onCellClick_method(event,cell){
-    if(cell._last_cast_caught){
-        cell._last_cast_caught.userData.extraParams.push(":active");
-        event.target3d = cell._last_cast_caught;
-        event.targetCell = cell;
-        event.targetElement = cell._last_cast_caught.userData.domEl
-        cell._last_cast_caught.userData.domEl.onclick.call(cell._last_cast_caught.userData.domEl,event);
-        paintExtraCell(cell);
-    }
+/* ------------------------------------------------------------------ */
+/*  Array-based flag helpers                                          */
+/* ------------------------------------------------------------------ */
+function addFlag(arr, flag) {
+    if (!arr.includes(flag)) arr.push(flag);      // no dupes
+}
+function delFlag(arr, flag) {
+    fastRemove_arry(arr, flag);                   // your util
 }
 
-export function default_onCellPointerMove_method(event,cell){
-    const intersects = _raycast(event,cell.focusedCamera, cell.loadedScene.children);
+/* ------------------------------------------------------------------ */
+/*  Public handlers                                                   */
+/* ------------------------------------------------------------------ */
+export function default_onCellClick_method(domEvt, cell) {
+    const hit = cell._last_cast_caught;
+    if (!hit) return;
 
-    if(intersects[0] && cell._last_cast_caught!= intersects[0].object){
-        cell._last_cast_caught = intersects[0].object;
-        //console.log("Caught in ray ", intersects[0].object);
-        intersects[0].object.userData.extraParams.push(":hover"); 
-        event.target3d = cell._last_cast_caught;
-        event.targetCell = cell;
-        event.targetElement = cell._last_cast_caught.userData.domEl
-        cell._last_cast_caught.userData.domEl.onmouseover.call(cell._last_cast_caught.userData.domEl,event);
-        paintExtraCell(cell);
-    }
-    else if(intersects.length == 0){
-        if(cell._last_cast_caught != null){
-            //console.log(intersects ,"Escaped The Ray : " , cell._last_cast_caught);
-            fastRemove_arry(cell._last_cast_caught.userData.extraParams, ':hover');
-            paintSpecificMuse(cell._last_cast_caught);
+    addFlag(hit.userData.extraParams, ':active');
+
+    const synth = {
+        type:            'cellclick',
+        originalEvt:     domEvt,
+        target3d:        hit,
+        targetCell:      cell,
+        targetElement:   hit.userData.domEl,
+        pointerPosition: cell._lastHitPosition
+    };
+
+    hit.userData.domEl.onclick?.call(hit.userData.domEl, synth);
+    paintExtraCell(cell);
+}
+
+export function default_onCellPointerMove_method(domEvt, cell) {
+    _raycast(domEvt, cell.focusedCamera);
+
+    const hit     = raycaster.intersectObjects(cell.loadedScene.children, true)[0];
+    const lastHit = cell._last_cast_caught;
+    
+
+    if (hit) {
+        if (hit.object !== lastHit) {
+            // transitioned to a new object
+            if (lastHit) {
+                delFlag(lastHit.userData.extraParams, ':hover');
+                paintSpecificMuse(lastHit);
+            }
+            cell._last_cast_caught = hit.object;
         }
+
+        addFlag(hit.object.userData.extraParams, ':hover');
+        cell._lastHitPosition = hit.point;
+
+        hit.object.userData.domEl.onmouseover?.call(
+            hit.object.userData.domEl,
+            {
+                type:            'cellhover',
+                originalEvt:     domEvt,
+                target3d:        hit.object,
+                targetCell:      cell,
+                targetElement:   hit.object.userData.domEl,
+                pointerPosition: hit.point
+            }
+        );
+
+        paintExtraCell(cell);
+    } else if (lastHit) {
+        // ray left all objects
+        delFlag(lastHit.userData.extraParams, ':hover');
+        paintSpecificMuse(lastHit);
         cell._last_cast_caught = null;
     }
 }
 
+/* ------------------------------------------------------------------ */
+/*  Internal: raycast helper                                          */
+/* ------------------------------------------------------------------ */
+function _raycast(domEvt, camera) {
+    const rect = domEvt.target.getBoundingClientRect();
 
-// Pass the mouse event, camera, and an array of target objects (meshes, groups, etc)
-function _raycast(event, camera, targets) {
-    // Calculate normalized device coordinates (-1 to +1) for both axes
-    const rect = event.target.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
+    ndcPointer.set(
+        ((domEvt.clientX - rect.left) / rect.width) * 2 - 1,
+        (-(domEvt.clientY - rect.top) / rect.height) * 2 + 1
     );
 
-    // Set up raycaster
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    // Compute intersections (returns sorted array: closest first)
-    const intersects = raycaster.intersectObjects(targets, true); // true = recursive search (children too)
-
-    // Return the array of intersections, or null if nothing hit
-    return intersects;
+    raycaster.setFromCamera(ndcPointer, camera);
 }

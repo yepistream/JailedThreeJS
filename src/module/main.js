@@ -32,21 +32,31 @@ class goballs_main_warden {
     renderer.setPixelRatio(dpr);
     renderer.setClearColor(0x000000, 1);
 
-    // basic scene + camera
-    const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
-    camera.position.z = 5;
-    scene.add(camera);
 
-    // lights
-    const dir = new THREE.DirectionalLight(0xffffff, 1);
-    dir.position.set(1, 1, 1).normalize();
-    scene.add(dir, new THREE.AmbientLight(0x404040));
+    // TODO : Allow multiple scenes as elements of the 
+    //    allScens = [...cellEl.querySelectorAll("scene")];
+
+
+    const scene  = new THREE.Scene();
+
+    //Finds Only Cameras From the Cell's Element lists.
+    const regex = /camera/i;
+    const foundCameraElms = Array.from(cellEl.children).filter(child =>
+      regex.test(child.tagName) || regex.test(child.id) || regex.test(child.className)
+    );
+
+    let camera = null;
+
+    if(foundCameraElms <= 0){
+     camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
+      console.warn("No Found Camera For : ",cellEl,". Creating a Default Camera.");
+    }
+
 
     // create and track the Cell
-    const cell = new Cell(cellEl, renderer, scene, camera);
+    const cell = new Cell(cellEl, renderer, scene, camera || null );
     this.allCells.set(cellEl,cell);
-    console.log('Cells:', this.allCells);
+    //console.log('Cells:', this.allCells);
   }
 }
 

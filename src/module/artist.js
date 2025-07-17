@@ -39,6 +39,13 @@ export function deep_searchParms(object, path) {
 function _apply_rule(rule, object, _chosenOne = null) {
   if (!rule || !rule.style) return;
   
+  if(object.userData.domEl.hasAttribute('onclick') || object.userData.domEl.hasAttribute('onmouseover') ){
+    object.layers.enable(1)
+  }
+  else{
+    object.layers.disable(1);
+  }
+
 
   for (let i = 0; i < rule.style.length; i++) {
     const rawProp = rule.style[i];                   // e.g. "--rotation-x"
@@ -71,8 +78,6 @@ function _apply_rule(rule, object, _chosenOne = null) {
                   target : object,
                   detail : {
                     Selector : _chosenOne,
-                    isHover : object.userData.extraParams.includes(":hover"),
-                    isClicked : object.userData.extraParams.includes(":active"),
                     from : og,
                     to : parent
                   }
