@@ -4,13 +4,14 @@
   "description": "Wilson",
   "license": "MIT",
   "author": "M.K.",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon app.js"
+    "dev": "vite"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "vite": "^5.2.0"
   },
   "dependencies": {
     "three": "^0.177.0"

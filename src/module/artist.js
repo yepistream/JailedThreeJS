@@ -22,6 +22,9 @@ function _getCSSRule(selector) {
   }
 }
 
+
+
+
 /** Walk `object` along `path` array, returning parent + final key */
 export function deep_searchParms(object, path) {
   const key    = path[path.length - 1];
@@ -40,10 +43,10 @@ function _apply_rule(rule, object, _chosenOne = null) {
   if (!rule || !rule.style) return;
   
   if(object.userData.domEl.hasAttribute('onclick') || object.userData.domEl.hasAttribute('onmouseover') ){
-    object.layers.enable(1)
+    object.layers.enable(3)
   }
   else{
-    object.layers.disable(1);
+    object.layers.disable(3);
   }
 
 
@@ -59,7 +62,7 @@ function _apply_rule(rule, object, _chosenOne = null) {
     const { parent, key } = deep_searchParms(object, path);
 
     // Apply logic TODO : Add Disable Transition Logic.
-    if(object.transition && !rawProp.includes('transition'))
+    if(object.transition !== null && object.transition !== undefined)
       {
         animateLerp(
           parent[key].toArray instanceof Function ? parent[key].toArray() : parent[key],
@@ -119,7 +122,7 @@ export function exchange_rule(parent,key,value){
     const inCaseIFuckUp = parent?.clone();
     parent[key](...value); // function like lookAt()
     if(parent !== NaN || parent === undefined) {
-      console.log(new parent.constructor(value[0],value[1],value[2]))
+      //console.log(new parent.constructor(value[0],value[1],value[2]))
       parent.copy(inCaseIFuckUp.add(new parent.constructor(value[0],value[1],value[2])))
     }
   } else if (typeof parent[key]?.set === 'function') {
@@ -180,16 +183,18 @@ export function paintSpecificMuse(muse){
     if (rule) _apply_rule(rule, muse);
     rule = _getCSSRule(`#${muse.userData.domId}`);
     if (rule) _apply_rule(rule, muse);
-
     muse.userData.extraParams.forEach(param => {
       const rule = _getCSSRule(`.${muse.name}${param}`);
       if (rule) _apply_rule(rule, muse);
     });
-  
+
     if (muse.userData.domId){
     muse.userData.extraParams.forEach(param => {
       const rule = _getCSSRule(`#${muse.userData.domId}${param}`);
       if (rule) _apply_rule(rule, muse);
     });
-  }  
+  } 
+  if (muse.userData.domEl.hasAttribute("style")) {
+      _apply_rule(muse.userData.domEl,muse);
+    }
 }

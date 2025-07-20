@@ -6,36 +6,28 @@
     <title>Document</title>
     <link rel="stylesheet" href="style.css">
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three":          "../node_modules/three/build/three.module.js",
-            "three/addons/":  "../node_modules/three/examples/jsm/",
-            "bezier-easing":  "../node_modules/bezier-easing/dist/bezier-easing.js"
-        }
-    }
-    </script>
+
 
 </head>
 <body>
 
     <cell width="500px" height="500px">
         <DirectionalLight class="global_light"></DirectionalLight>
-        <PerspectiveCamera active id="Main_Camera"> </PerspectiveCamera>
-        <mesh id="building_floor" onmouseover="moveNavCube(event)" onclick="placeBlock(event)" ></mesh>
-        <mesh id="ghost_nav_place_block" ></mesh>
+        <OrthographicCamera active id="Main_Camera"> </OrthographicCamera>
+        <mesh id="building_floor" onmouseover="moveNavCube(event)" ></mesh>
+        <mesh id="ghost_nav_place_block" onclick="placeBlock(event)" ></mesh>
     </cell>
 
     <script>
         const navmeshelm = document.getElementById("ghost_nav_place_block");
         function moveNavCube(event) {
-            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x},1,${event.pointerPosition.z})`);
+            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},1,${event.pointerPosition.z.toFixed(0)})`);
         }
         function placeBlock(event){
             console.log(event);
             const block = document.createElement('mesh');
-            block.className = "placed_block";
-            block.style.setProperty("--position",`(${event.pointerPosition.x},1,${event.pointerPosition.z})`);
+            block.className = "placed_block";   
+            block.style.setProperty("--position",`(${Math.round(event.pointerPosition.x)},1,${Math.round(event.pointerPosition.z)})`);
             document.querySelector("cell").appendChild(block);
         }
         function test(event){
@@ -43,6 +35,5 @@
         };
     </script>
     <script type = "module" src="./module/main.js"></script>
-    <script type="module" src="script.js"></script>
 </body>
 </html>

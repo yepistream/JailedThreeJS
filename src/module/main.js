@@ -47,7 +47,7 @@ class goballs_main_warden {
 
     let camera = null;
 
-    if(foundCameraElms <= 0){
+    if (foundCameraElms.length === 0) {
      camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
       console.warn("No Found Camera For : ",cellEl,". Creating a Default Camera.");
     }

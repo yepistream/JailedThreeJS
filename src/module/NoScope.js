@@ -8,7 +8,7 @@ import { fastRemove_arry } from './utils.js';
 const raycaster  = new THREE.Raycaster();
 const ndcPointer = new THREE.Vector2();
 
-raycaster.layers.set(1);
+raycaster.layers.set(3);
 
 /* ------------------------------------------------------------------ */
 /*  Array-based flag helpers                                          */

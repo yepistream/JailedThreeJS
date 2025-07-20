@@ -55,7 +55,7 @@ cell > :not(canvas){
 }
 
 .placed_block{
-    --material-color : (1,1,1);
+    --material-color : (0,0,0);
     --scale : (1,1,1);
     --geometry : @cube;
 }
