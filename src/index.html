@@ -13,21 +13,25 @@
 
     <cell width="500px" height="500px">
         <DirectionalLight class="global_light"></DirectionalLight>
-        <OrthographicCamera active id="Main_Camera"> </OrthographicCamera>
-        <mesh id="building_floor" onmouseover="moveNavCube(event)" ></mesh>
-        <mesh id="ghost_nav_place_block" onclick="placeBlock(event)" ></mesh>
+        <OrthographicCamera render id="Main_Camera"> </OrthographicCamera>
+        <mesh id="building_floor" onmouseover="moveNavCube(event)" onclick="placeBlock(event)" ></mesh>
+        <mesh id="ghost_nav_place_block"  ></mesh>
     </cell>
 
     <script>
         const navmeshelm = document.getElementById("ghost_nav_place_block");
         function moveNavCube(event) {
-            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},1,${event.pointerPosition.z.toFixed(0)})`);
+            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},${event.pointerPosition.y.toFixed(0)},${event.pointerPosition.z.toFixed(0)})`);
         }
         function placeBlock(event){
             console.log(event);
             const block = document.createElement('mesh');
-            block.className = "placed_block";   
-            block.style.setProperty("--position",`(${Math.round(event.pointerPosition.x)},1,${Math.round(event.pointerPosition.z)})`);
+            block.className = "placed_block";
+            const setPos = navmeshelm.style.getPropertyValue("--position");
+            block.style.setProperty("--position",setPos);
+            block.style.setProperty("--material-color", `(${Math.random().toFixed(2)},${Math.random().toFixed(2)},${Math.random().toFixed(2)})`);
+            block.setAttribute("onmouseover","moveNavCube(event)");
+            block.setAttribute("onclick","placeBlock(event)");
             document.querySelector("cell").appendChild(block);
         }
         function test(event){

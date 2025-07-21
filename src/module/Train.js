@@ -81,7 +81,7 @@ function _get_Equation(timingFunction) {
 
 // Usage example:
 const easeFunc = _get_Equation("ease-in-out");
-console.log(easeFunc(0.5)); // ~0.5 but eased
+//console.log(easeFunc(0.5)); // ~0.5 but eased
 
 
 function lerpValue(from, to, t, lerpMethod) {

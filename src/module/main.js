@@ -3,28 +3,18 @@ import * as THREE from 'three';
 import Cell from './cell.js';
 
 
-window.addEventListener("DOMContentLoaded", ()=>{
-  window.JThree = new goballs_main_warden();
-});
 
-class goballs_main_warden {
-  constructor() {
-    this.allCells = new WeakMap();
-    this._init_convert();
 
-  }
+class JTHREE {
 
-  getCell(element){
-    return this.allCells.get(element);
-  }
 
-  _init_convert() {
+  static init_convert() {
     document.querySelectorAll('cell').forEach(el => {
-      this._create_THREEJSRENDERER(el);
+      JTHREE.create_THREEJSRENDERER(el);
     });
   }
 
-  _create_THREEJSRENDERER(cellEl) {
+  static create_THREEJSRENDERER(cellEl) {
     const { canvas } = createWebGLOverlay(cellEl);
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     const dpr = window.devicePixelRatio || 1;
@@ -48,20 +38,19 @@ class goballs_main_warden {
     let camera = null;
 
     if (foundCameraElms.length === 0) {
-     camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
       console.warn("No Found Camera For : ",cellEl,". Creating a Default Camera.");
     }
 
 
     // create and track the Cell
     const cell = new Cell(cellEl, renderer, scene, camera || null );
-    this.allCells.set(cellEl,cell);
-    //console.log('Cells:', this.allCells);
+    //console.log('Cells:', JTHREE.allCells);
   }
 }
 
 function createWebGLOverlay(hostEl, glOptions = {}) {
-  console.log(hostEl);
+  //console.log(hostEl);
   const { width, height } = hostEl.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   if (getComputedStyle(hostEl).position === 'static') {
@@ -84,4 +73,8 @@ function createWebGLOverlay(hostEl, glOptions = {}) {
   return { canvas, gl };
 }
 
-export default goballs_main_warden;
+// Initialize on load
+JTHREE.init_convert();
+window.JThree = JTHREE;
+
+export {JTHREE};

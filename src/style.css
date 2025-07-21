@@ -32,8 +32,7 @@ cell > :not(canvas){
     --position : (1,1,1);
     --scale : (1,1,1);
     --geometry : @cube;
-    --material-transparent : 1;
-    --material-opacity : 0.25;
+
 }
 
 
@@ -50,12 +49,15 @@ cell > :not(canvas){
 
 
 #Main_Camera{
-    --position: (7,15,12);
-    --rotation : (-1.0,0.3,0.38);
+    --position: (15,20,15);
+    --refreshLook: 40;
+}
+
+#Main_Camera:active{
+    --lookAt: #building_floor-position;
 }
 
 .placed_block{
-    --material-color : (0,0,0);
     --scale : (1,1,1);
     --geometry : @cube;
 }

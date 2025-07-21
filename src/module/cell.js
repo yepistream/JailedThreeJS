@@ -1,31 +1,52 @@
 // cell.js
 import * as THREE from 'three';
 import { fastRemove_arry, getClassMap }  from './utils.js';
-import { paintCell, paintConvict, deep_searchParms, paintSpecificMuse }    from './artist.js';
+import { paintCell, paintConvict, deep_searchParms, paintSpecificMuse, paintConstantMuse, getCSSRule }    from './artist.js';
 import { default_onCellClick_method, default_onCellPointerMove_method } from './NoScope.js';
 
 
 
 export default class Cell {
+
+  static allCells = new WeakMap();
+
+  static getCell(element) {
+    if(Cell.allCells.has(element)){
+      return Cell.allCells.get(element);
+    }
+    else{
+      console.error("No Cell Found With The Element : ", element);
+      return null;
+    }
+  }
+
   constructor(cellElm, renderer, scene, camera = null, _MainAnimMethod = null) {
     this.cellElm       = cellElm;
     this.threeRenderer = renderer;
     this.loadedScene   = scene;
     this.focusedCamera = camera;
 
+    this.constantConvicts = [];
     this.classyConvicts = [];
     this.namedConvicts  = [];
 
     this._allConvictsByDom = new WeakMap();
 
     this.updateFunds = [];
+    this.updateFunds.push(()=>{
+      this.constantConvicts.forEach(cC => {
+        paintConstantMuse(cC);
+      });
+    });
 
     this._last_cast_caught = null;
+
+    Cell.allCells.set(cellElm, this);
     
     // * Load The Scene
       
 
-    this.ScanCell();
+    this._ScanCell();
 
     this._lastHitPosition = null;
 
@@ -51,16 +72,16 @@ export default class Cell {
 
           mutation.addedNodes.forEach(node => {
             if(node.nodeType === Node.ELEMENT_NODE){
-              this._ScanElement(node)
+              this.ScanElement(node)
               paintSpecificMuse(this.getConvictByDom(node));
-              console.log(this.getConvictByDom(node), " got added");
+              //console.log(this.getConvictByDom(node), " got added");
             }
           });
 
           mutation.removedNodes.forEach(node => {
             if(node.nodeType === Node.ELEMENT_NODE){
               this.removeConvict(this._allConvictsByDom.get(node));
-              console.log("Sucssefully Served His Sentence , " , node)
+              //console.log("Sucssefully Served His Sentence , " , node)
             }
           });
 
@@ -113,71 +134,20 @@ export default class Cell {
     this._anim();
   }
 
-  ScanCell(){
+  
+
+
+  _ScanCell(){
     for (let i = 0; i < this.cellElm.children.length; i++) {
       const convictElm = this.cellElm.children[i];
-      this._ScanElement(convictElm);
+      this.ScanElement(convictElm);
     }
   }
 
 
-  _ScanAllDom(parentObj /* Object/Scene, NOT DOM/ELEMENT */, parentElm = null) {
-    // Don't Touch Not Sure What's Happening Really Here .
-    const parentElm_t = parentElm ? parentElm : parentObj.userData.domEl;
-    // IF THERE IS NO PARENT, USE LOADED SCENE.
-    for (let domEl of parentElm_t.children) {
-      if(this._allConvictsByDom.has(domEl)){
-        continue;
-      }     
   
-      // Generic instantiation
-      const instance = this.ConvertDomToObject(domEl);
 
-      // (IF) Camera Instantation
-      if(domEl.tagName.includes("CAMERA") && domEl.hasAttribute("active")) {
-        const rect = this.cellElm.getBoundingClientRect();
-        const aspect = rect.width / rect.height;
-        if(domEl.tagName == "PERSPECTIVECAMERA"){
-          instance.fov = 75;
-          instance.aspect = aspect
-          instance.far = 1000;
-          instance.near = 0.1;
-        }
-        else{
-          const frustumSize = 20;
-          instance.left = (-frustumSize * aspect) / 2;
-          instance.right = (frustumSize * aspect) / 2;
-          instance.top = frustumSize / 2;
-          instance.bottom = -frustumSize / 2;
-        }
-        if(domEl.hasAttribute("active")) this.focusedCamera = instance;
-        this.focusedCamera.updateProjectionMatrix();
-        this.threeRenderer.setSize(rect.width, rect.height);
-        this.threeRenderer.setPixelRatio(window.devicePixelRatio);
-      }
-
-      instance.userData.domEl = domEl;
-      instance.userData.extraParams = [];
-      instance.transition = null;
-      parentObj.add(instance);
-
-      if (domEl.id) {
-        instance.userData.domId = domEl.id;
-        this.namedConvicts.push(instance);
-      }
-      const cls = domEl.getAttribute('class');
-      if (cls) {
-        instance.name = cls;
-        this.classyConvicts.push(instance);
-      }
-      this._allConvictsByDom.set(domEl, instance);
-      
-      this._ScanAllDom(instance);
-      ////console.log(instance);
-    }
-  }
-
-  _ScanElement(elm){
+  ScanElement(elm){
     const parentObj = this.getConvictByDom(elm.parent) || this.loadedScene;
       const instance = this.ConvertDomToObject(elm);
       if(this._allConvictsByDom.has(elm) || instance === null ){
@@ -185,7 +155,7 @@ export default class Cell {
       }
 
       // (IF) Camera Instantation
-      if(elm.tagName.includes("CAMERA") && elm.hasAttribute("active")) {
+      if(elm.tagName.includes("CAMERA")) {
         const rect = this.cellElm.getBoundingClientRect();
         const aspect = rect.width / rect.height;
         if(elm.tagName == "PERSPECTIVECAMERA"){
@@ -196,35 +166,51 @@ export default class Cell {
         }
         else{
           const frustumSize = 20;
+          instance.frustumSize = 20;
+          instance.aspect = aspect;
           instance.left = (-frustumSize * aspect) / 2;
           instance.right = (frustumSize * aspect) / 2;
           instance.top = frustumSize / 2;
           instance.bottom = -frustumSize / 2;
+          instance.refreshLook = (fSize)=>{
+            instance.frustumSize = fSize;
+            instance.left = (-fSize * instance.aspect) / 2;
+            instance.right = (fSize * instance.aspect) / 2;
+            instance.top = fSize / 2;
+            instance.bottom = -fSize / 2;
+            instance.updateProjectionMatrix();
+          }
         }
-        if(elm.hasAttribute("active")) this.focusedCamera = instance;
-        this.focusedCamera.updateProjectionMatrix();
-        this.threeRenderer.setSize(rect.width, rect.height);
-        this.threeRenderer.setPixelRatio(window.devicePixelRatio);
+        if(elm.hasAttribute("render")) {
+          this.focusedCamera = instance;
+          this.focusedCamera.updateProjectionMatrix();
+          this.threeRenderer.setSize(rect.width, rect.height);
+          this.threeRenderer.setPixelRatio(window.devicePixelRatio);
+        }
       }
 
       instance.userData.domEl = elm;
       instance.userData.extraParams = [];
       instance.transition = null;
+      
       parentObj.add(instance);
 
       if (elm.id) {
         instance.userData.domId = elm.id;
         this.namedConvicts.push(instance);
+        console.log(getCSSRule(`#${elm.id}:constant`));
+        if(getCSSRule(`#${elm.id}:active`)) this.constantConvicts.push(instance);
       }
       const cls = elm.getAttribute('class');
       if (cls) {
         instance.name = cls;
-        this.classyConvicts.push(instance);
+        this.classyConvicts.push(instance); 
+        if(!this.constantConvicts.includes(instance) && getCSSRule(`.${cls}:active`)) this.constantConvicts.push(instance);
       }
       this._allConvictsByDom.set(elm, instance);
       for (let i = 0; i < elm.children.length; i++) {
         const element = elm.children[i];
-        this._ScanElement(element);
+        this.ScanElement(element);
       }
   }
 

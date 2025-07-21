@@ -27,7 +27,7 @@ export function default_onCellClick_method(domEvt, cell) {
     const hit = cell._last_cast_caught;
     if (!hit) return;
 
-    addFlag(hit.userData.extraParams, ':active');
+    addFlag(hit.userData.extraParams, ':focus');
 
     const synth = {
         type:            'cellclick',
