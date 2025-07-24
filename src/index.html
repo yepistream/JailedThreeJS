@@ -13,15 +13,15 @@
 
     <cell width="500px" height="500px">
         <DirectionalLight class="global_light"></DirectionalLight>
-        <OrthographicCamera render id="Main_Camera"> </OrthographicCamera>
-        <mesh id="building_floor" onmouseover="moveNavCube(event)" onclick="placeBlock(event)" ></mesh>
+        <OrthoraphicCamera render id="Main_Camera"> </OrthoraphicCamera>
+        <mesh id="building_floor" onmouseover="moveNavCube(event,-2)" onclick="placeBlock(event)" ></mesh>
         <mesh id="ghost_nav_place_block"  ></mesh>
     </cell>
 
     <script>
         const navmeshelm = document.getElementById("ghost_nav_place_block");
-        function moveNavCube(event) {
-            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},${event.pointerPosition.y.toFixed(0)},${event.pointerPosition.z.toFixed(0)})`);
+        function moveNavCube(event, offsetY=0) {
+            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},${event.pointerPosition.y.toFixed(0)-offsetY},${event.pointerPosition.z.toFixed(0)})`);
         }
         function placeBlock(event){
             console.log(event);

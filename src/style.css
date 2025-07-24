@@ -49,13 +49,12 @@ cell > :not(canvas){
 
 
 #Main_Camera{
-    --position: (15,20,15);
+    --position: (10,20,10);
     --refreshLook: 40;
-}
-
-#Main_Camera:active{
     --lookAt: #building_floor-position;
 }
+
+
 
 .placed_block{
     --scale : (1,1,1);

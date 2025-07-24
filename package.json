@@ -1,11 +1,16 @@
 {
   "name": "JailedThreeJS",
-  "version": "1.0.0",
-  "description": "Wilson",
+  "version": "0.9.0",
+  "description": "Deticated To Willson :D, A Small-Fast And 'Janky' lightweight framework for Three.JS",
   "license": "MIT",
   "author": "M.K.",
   "type": "module",
-  "main": "index.js",
+  "main": "src/module/index.js",
+  "module": "src/module/index.js",
+  "exports": "./src/module/index.js",
+  "files": [
+    "src/module/"
+  ],
   "scripts": {
     "dev": "vite"
   },
