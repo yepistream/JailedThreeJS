@@ -9,12 +9,20 @@ import { AllKeyFramesMap, gatherKeyFrame_MAP } from "./utils.js";
 */
 
 
+// Simple numeric linear interpolation
+// #param a - starting value
+// #param b - ending value
+// #param t - interpolation factor [0,1]
 function lerpNumber(a, b, t) {
     return a + (b - a) * t;
 }
 
 
 // cubic-bezier factory: returns a function f(t) implementing the curve
+// #param p0 - start control point x
+// #param p1 - start control point y
+// #param p2 - end control point x
+// #param p3 - end control point y
 function cubicBezier(p0, p1, p2, p3) {
   // from https://github.com/gre/bezier-easing (simplified)
   const cx = 3 * p0;
@@ -42,6 +50,8 @@ function cubicBezier(p0, p1, p2, p3) {
   return x => sampleCurveY(solveTforX(x));
 }
 
+// Resolve the easing function from a CSS timing function string
+// #param timingFunction - CSS timing function name or cubic-bezier expression
 function _get_Equation(timingFunction) {
   switch (timingFunction) {
     case "linear":
@@ -84,6 +94,11 @@ const easeFunc = _get_Equation("ease-in-out");
 //console.log(easeFunc(0.5)); // ~0.5 but eased
 
 
+// Lerp numbers or arrays using the provided lerp method
+// #param from - starting value or array
+// #param to - ending value or array
+// #param t - interpolation factor
+// #param lerpMethod - method to lerp individual numbers
 function lerpValue(from, to, t, lerpMethod) {
     // Both numbers
     if (typeof from === 'number' && typeof to === 'number') {
@@ -100,6 +115,13 @@ function lerpValue(from, to, t, lerpMethod) {
 
 
 
+// Animate between two values over time
+// #param from - starting number or array
+// #param to - ending number or array
+// #param durationMs - duration in milliseconds
+// #param onUpdate - callback each frame with value and eased t
+// #param onComplete - callback when done
+// #param timingFunction - CSS timing function name
 export function animateLerp(from, to, durationMs, onUpdate, onComplete, timingFunction = "linear") {
   if (typeof from === "number" || Array.isArray(from)) {
     const start = performance.now();
@@ -128,6 +150,9 @@ export function animateLerp(from, to, durationMs, onUpdate, onComplete, timingFu
 }
 
 
+// Parse a CSS time expression relative to total milliseconds
+// #param str - time string like "50%" or "150ms"
+// #param totalMs - total duration used for percentages
 function parseTime(str, totalMs) {
   if (typeof str === 'number') return str;
   if (str.endsWith('%')) {
@@ -139,6 +164,9 @@ function parseTime(str, totalMs) {
   throw new Error(`Unsupported time format: ${str}`);
 }
 
+// Apply a keyframe animation to a THREE object
+// #param object - THREE object to animate
+// #param animationObj - settings describing the animation
 export async function KeyFrameAnimationLerp(object, animationObj) {
   // 1) grab the rule
   const keyFramesRule = AllKeyFramesMap.get(animationObj.name);
@@ -147,6 +175,8 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
   }
 
   // 2) parse “0%” or “500ms” against animationObj.duration
+  // Helper to parse keyframe time strings
+  // #param keyText - percentage or millisecond string
   function parseTime(keyText) {
     if (keyText.endsWith('%')) {
       return (parseFloat(keyText) / 100) * animationObj.duration;

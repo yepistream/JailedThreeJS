@@ -7,6 +7,8 @@ import { FBXLoader  } from 'three/examples/jsm/loaders/FBXLoader.js';
 
 export let AllKeyFramesMap = new Map();
 
+// Collect all @keyframes rules from loaded stylesheets
+// #param none
 export function gatherKeyFrame_MAP() {
   const keyframesMap = new Map();
 
@@ -42,6 +44,8 @@ export function gatherKeyFrame_MAP() {
 /* ───────────────── CLASS MAP ───────────────── */
 let classMap = null;
 
+// Build a map of available THREE classes
+// #param none
 function buildClassMap() {
   classMap = Object.getOwnPropertyNames(THREE)
     .filter(key => {
@@ -57,6 +61,8 @@ function buildClassMap() {
 
   classMap.OBJECT3D = THREE.Object3D;   // base type
 }
+// Get cached class map, building it on first call
+// #param none
 export function getClassMap() {
   if (!classMap) buildClassMap();
   return classMap;
@@ -67,6 +73,9 @@ let assetMap = new Map();
 
 
 
+// Retrieve or load an asset by name
+// #param name - asset key
+// #param path - optional path if asset needs loading
 export function getAsset(name, path = null) {
   //console.log(assetMap);
   if(assetMap.size == 0){
@@ -93,6 +102,8 @@ export function getAsset(name, path = null) {
 const gltfLoader = new GLTFLoader();
 const fbxLoader  = new FBXLoader();
 
+// Load a 3D asset based on file extension
+// #param url - URL of the asset
 export function loadAsset(url) {
   const ext = url.split('.').pop().toLowerCase();
   switch (ext) {
@@ -108,6 +119,9 @@ export function loadAsset(url) {
   }
 }
 
+// Remove an item from an array without preserving order
+// #param arry - array to modify
+// #param item - item to remove
 export function fastRemove_arry(arry,item){
   const index = arry.indexOf(item);
   if(index !== -1){

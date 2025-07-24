@@ -8,12 +8,16 @@ import Cell from './cell.js';
 class JTHREE {
 
 
+  // Convert all <cell> elements into JTHREE cells
+  // #param none
   static init_convert() {
     document.querySelectorAll('cell').forEach(el => {
       JTHREE.create_THREEJSRENDERER(el);
     });
   }
 
+  // Initialize renderer and scene for a cell element
+  // #param cellEl - DOM element acting as the cell
   static create_THREEJSRENDERER(cellEl) {
     const { canvas } = createWebGLOverlay(cellEl);
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -49,6 +53,9 @@ class JTHREE {
   }
 }
 
+// Create a WebGL canvas overlay on a host element
+// #param hostEl - DOM element to attach the canvas to
+// #param glOptions - WebGL context options
 function createWebGLOverlay(hostEl, glOptions = {}) {
   //console.log(hostEl);
   const { width, height } = hostEl.getBoundingClientRect();

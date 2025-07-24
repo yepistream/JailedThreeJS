@@ -13,6 +13,8 @@ import * as THREE from '../../node_modules/three/build/three.module.js';
 
 
 /** Find first rule whose selectorText tokens include `selector` */
+// Locate a CSS rule by selector text
+// #param selector - selector to look for
 export function getCSSRule(selector) {
   for (let sheet of document.styleSheets) {
     let rules;
@@ -33,6 +35,9 @@ export function getCSSRule(selector) {
 
 
 /** Walk `object` along `path` array, returning parent + final key */
+// Walk `object` along `path` array, returning parent + final key
+// #param object - root object
+// #param path - array of keys
 export function deep_searchParms(object, path) {
   const key    = path[path.length - 1];
   const parent = path.slice(0, -1).reduce((o, k) => {
@@ -45,6 +50,9 @@ export function deep_searchParms(object, path) {
 /**
  * Apply a CSS custom-prop rule to a THREE object.
  * Supports `--foo-bar: value;` → object.foo.bar = parsedValues
+ * #param rule - CSSStyleRule to apply
+ * #param object - target THREE object
+ * #param _chosenOne - selector that triggered the rule
  */
 function _apply_rule(rule, object, _chosenOne = null) {
   if (!rule || !rule.style) return;
@@ -104,6 +112,9 @@ function _apply_rule(rule, object, _chosenOne = null) {
   }
 }
 
+// Convert CSS property values into Three.js compatible values
+// #param value - raw CSS value
+// #param __object - reference object for lookups
 export function CSSValueTo3JSValue(value, __object = null){
   // Parse values: (x,y,z), number, or string
   let parsed;
@@ -163,6 +174,10 @@ export function CSSValueTo3JSValue(value, __object = null){
   return parsed
 }
 
+// Assign a value to a property, supporting vectors and setter functions
+// #param parent - target object
+// #param key - property name
+// #param value - value or array of values
 export function exchange_rule(parent,key,value){
     // TODO: In Case Of Performance Issues, Start Caching the stuff that passes thru when transitioning so that it dosen't need to run thru this if check hell, otherwise go fuck yourself.
     if (Array.isArray(value) && typeof parent[key] === 'function') {
@@ -202,10 +217,15 @@ export function exchange_rule(parent,key,value){
       console.error("Failed to parse rule with Parent : ", parent, ";\nkey of : ", key ,";\nWhilist Trying To Assign This Value To it: ", key);
   }
 
+// Apply styles for a specific element inside a cell
+// #param convictElm - DOM element
+// #param cell - owning Cell instance
 export function paintConvict(convictElm,cell){
   _apply_rule(convictElm,cell._allConvictsByDom.get(convictElm))
 }
 
+// Apply extra state-based styles to all objects in a cell
+// #param muse - Cell instance
 export function paintExtraCell(muse){
   for (let obj of muse.classyConvicts) {
     obj.userData.extraParams.forEach(param => {
@@ -222,7 +242,9 @@ export function paintExtraCell(muse){
   }
 }
 
-export function paintCell(muse) { 
+// Paint all objects in a cell based on class/id rules
+// #param muse - Cell instance
+export function paintCell(muse) {
   for (let obj of muse.classyConvicts) {
     const rule = getCSSRule(`.${obj.name}`);
     if (rule) _apply_rule(rule, obj, `.${obj.name}`);
@@ -234,6 +256,8 @@ export function paintCell(muse) {
   }
 }
 
+// Apply rules for a single object
+// #param muse - THREE object to paint
 export function paintSpecificMuse(muse){
 
     let rule = getCSSRule(`.${muse.name}`);
@@ -257,6 +281,8 @@ export function paintSpecificMuse(muse){
 }
 
 
+// Apply constant :active rules to an object
+// #param muse - THREE object to paint
 export function paintConstantMuse(muse){
       let rule = getCSSRule(`.${muse.name}:active`);
       if (rule) _apply_rule(rule, muse);

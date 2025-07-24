@@ -13,9 +13,15 @@ raycaster.layers.set(3);
 /* ------------------------------------------------------------------ */
 /*  Array-based flag helpers                                          */
 /* ------------------------------------------------------------------ */
+// Add a flag to an array if it is not already present
+// #param arr - array to modify
+// #param flag - flag to add
 function addFlag(arr, flag) {
     if (!arr.includes(flag)) arr.push(flag);      // no dupes
 }
+// Remove a flag from an array
+// #param arr - array to modify
+// #param flag - flag to remove
 function delFlag(arr, flag) {
     fastRemove_arry(arr, flag);                   // your util
 }
@@ -23,6 +29,9 @@ function delFlag(arr, flag) {
 /* ------------------------------------------------------------------ */
 /*  Public handlers                                                   */
 /* ------------------------------------------------------------------ */
+// Handle click events inside a cell
+// #param domEvt - browser mouse event
+// #param cell - Cell instance that received the click
 export function default_onCellClick_method(domEvt, cell) {
     const hit = cell._last_cast_caught;
     if (!hit) return;
@@ -42,6 +51,9 @@ export function default_onCellClick_method(domEvt, cell) {
     paintExtraCell(cell);
 }
 
+// Handle pointer movement inside a cell
+// #param domEvt - browser pointer event
+// #param cell - Cell instance to test against
 export function default_onCellPointerMove_method(domEvt, cell) {
     _raycast(domEvt, cell.focusedCamera);
 
@@ -86,6 +98,9 @@ export function default_onCellPointerMove_method(domEvt, cell) {
 /* ------------------------------------------------------------------ */
 /*  Internal: raycast helper                                          */
 /* ------------------------------------------------------------------ */
+// Internal helper to perform a raycast using event coordinates
+// #param domEvt - browser pointer event
+// #param camera - camera used for the raycast
 function _raycast(domEvt, camera) {
     const rect = domEvt.target.getBoundingClientRect();
 

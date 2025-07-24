@@ -10,6 +10,8 @@ export default class Cell {
 
   static allCells = new WeakMap();
 
+  // Retrieve an existing Cell instance from an element
+  // #param element - DOM element hosting the cell
   static getCell(element) {
     if(Cell.allCells.has(element)){
       return Cell.allCells.get(element);
@@ -20,6 +22,12 @@ export default class Cell {
     }
   }
 
+  // Create a new Cell controller
+  // #param cellElm - root cell element
+  // #param renderer - THREE renderer
+  // #param scene - THREE scene to control
+  // #param camera - initial camera
+  // #param _MainAnimMethod - optional animation loop
   constructor(cellElm, renderer, scene, camera = null, _MainAnimMethod = null) {
     this.cellElm       = cellElm;
     this.threeRenderer = renderer;
@@ -137,6 +145,8 @@ export default class Cell {
   
 
 
+  // Initial scan converting child elements to THREE objects
+  // #param none
   _ScanCell(){
     for (let i = 0; i < this.cellElm.children.length; i++) {
       const convictElm = this.cellElm.children[i];
@@ -147,6 +157,8 @@ export default class Cell {
 
   
 
+  // Convert a DOM element into a THREE object and attach it
+  // #param elm - DOM element to convert
   ScanElement(elm){
     const parentObj = this.getConvictByDom(elm.parent) || this.loadedScene;
       const instance = this.ConvertDomToObject(elm);
@@ -215,6 +227,8 @@ export default class Cell {
   }
 
   
+  // Instantiate a THREE object from a DOM tag
+  // #param elm - DOM element
   ConvertDomToObject(elm){
     const key  = elm.tagName.replace(/-/g, '');
     const Ctor = getClassMap()[key];
@@ -228,6 +242,8 @@ export default class Cell {
     return new Ctor();
   }
 
+  // Remove a THREE object created from a DOM element
+  // #param convict - object to remove
   removeConvict(convict){
     
     convict.children.forEach(element => {
@@ -242,12 +258,18 @@ export default class Cell {
   }
 
 
+  // Retrieve object by its originating DOM element
+  // #param element - DOM element used to create the object
   getConvictByDom(element){
-    return this._allConvictsByDom.get(element); 
+    return this._allConvictsByDom.get(element);
   }
+  // Retrieve object using DOM id
+  // #param id - element id
   getConvictById(id){
      return this._allConvictsByDom.get(document.getElementById(id));
   }
+  // Get all objects that share a class name
+  // #param className - CSS class
   getConvictsByClass(className){
     const cls_check_t = [...document.getElementsByClassName(className)];
     let return_value_t = [];
@@ -260,6 +282,8 @@ export default class Cell {
     return return_value_t;
   }
 
+  // Clean up observers and event listeners
+  // #param none
   dispose() {
     this._running = false;
     this._resizeObserver.disconnect();
