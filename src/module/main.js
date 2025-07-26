@@ -16,7 +16,20 @@ class JTHREE {
     });
   }
 
-  // Initialize renderer and scene for a cell element
+
+    /**
+   * Legacy alias for {@link init_convert}.  Older examples may still
+   * reference `_convert_init_()` when initialising a page.  This
+   * alias ensures backwards compatibility by delegating to
+   * {@link init_convert}.  You should use {@link init_convert} in
+   * new code.
+   *
+   * @static
+   */
+  static _convert_init_() {
+    return JTHREE.init_convert();
+  }
+// Initialize renderer and scene for a cell element
   // #param cellEl - DOM element acting as the cell
   static create_THREEJSRENDERER(cellEl) {
     const { canvas } = createWebGLOverlay(cellEl);
@@ -80,7 +93,7 @@ function createWebGLOverlay(hostEl, glOptions = {}) {
   return { canvas, gl };
 }
 
-// Initialize on load
+// initialise on module load
 JTHREE.init_convert();
 window.JThree = JTHREE;
 
