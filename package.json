@@ -1,7 +1,7 @@
 {
   "name": "JailedThreeJS",
-  "version": "0.9.0",
-  "description": "Deticated To Willson :D, A Small-Fast And 'Janky' lightweight framework for Three.JS",
+  "version": "0.9.1",
+  "description": "Dedicated To Willson :D, A small, fast and lightweight Three.js framework.",
   "license": "MIT",
   "author": "M.K.",
   "type": "module",
