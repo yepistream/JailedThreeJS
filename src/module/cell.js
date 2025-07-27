@@ -20,7 +20,7 @@ import {
   default_onCellContextMenu_method
 } from './NoScope.js';
 
-export default class Cell {
+ class Cell {
   /**
    * A WeakMap associating DOM elements with their corresponding Cell
    * instances.  Use `Cell.getCell(element)` to retrieve the cell for a
@@ -96,22 +96,27 @@ export default class Cell {
     cellElm.addEventListener('contextmenu', this._boundContextMenu);
     // paint initial state
     paintCell(this);
+
     // observe inline style changes and child mutations
     this._styleObserver = new MutationObserver((mutationList) => {
       mutationList.forEach(mutation => {
+        if(mutation.target.nodeName === "CANVAS") return;
+        
         switch (mutation.type) {
-          case 'childList':
-            mutation.addedNodes.forEach(node => {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                this.ScanElement(node);
-                paintSpecificMuse(this.getConvictByDom(node));
+            case 'childList':
+            for (let i = 0; i < mutation.addedNodes.length; i++) {
+              const node = mutation.addedNodes[i];
+              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== "CANVAS") {
+              this.ScanElement(node);
+              paintSpecificMuse(this.getConvictByDom(node));
               }
-            });
-            mutation.removedNodes.forEach(node => {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                this.removeConvict(this._allConvictsByDom.get(node));
+            }
+            for (let i = 0; i < mutation.removedNodes.length; i++) {
+              const node = mutation.removedNodes[i];
+              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== "CANVAS") {
+              this.removeConvict(this._allConvictsByDom.get(node));
               }
-            });
+            }
             break;
           case 'attributes':
             paintConvict(mutation.target, this);
@@ -119,6 +124,7 @@ export default class Cell {
         }
       });
     });
+
     // TODO: add observer for head count and cleanup unused convicts
     this._styleObserver.observe(this.cellElm, {
       attributes: true,
@@ -368,3 +374,5 @@ export default class Cell {
     if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
   }
 }
+
+export default Cell;

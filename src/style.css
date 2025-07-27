@@ -10,15 +10,7 @@ html, body {
   padding: 0;
 }
 
-cell {
-    display: inline-block;
-    width: 100%;
-    height: 100%;
-}
 
-cell > :not(canvas){
-    display: none;
-}
 
 
 .global_light{
@@ -27,36 +19,21 @@ cell > :not(canvas){
     --position-set : (1,10,1);
 }
 
-#ghost_nav_place_block{
-    --material-color : (0,0,1);
-    --position : (1,1,1);
-    --scale : (1,1,1);
-    --geometry : @cube;
-
-}
-
-
-
-#building_floor{
-    --position : (0,0,0);
-    --material-color : (1,1,1);
-    --scale : (185,185,1);
-    --geometry : @plane;
-    --rotation : (-1.5708,0,0);
-}
-
-
 
 
 #Main_Camera{
-    --position: (10,20,10);
+    --position: (0,-5,0);
     --refreshLook: 40;
-    --lookAt: #building_floor-position;
+    --lookAt: (0,0,0);
 }
 
-
-
-.placed_block{
-    --scale : (1,1,1);
+#_tTT-202_3{
+    --position : (0,0,0);
     --geometry : @cube;
+    --material-color : (1,1,1);
 }
+
+
+
+
+

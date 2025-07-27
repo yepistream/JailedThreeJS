@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import Cell from './cell.js';
 
 class JTHREE {
+  static __Loaded_Cells__ = new WeakMap();
   /**
    * Convert all `<cell>` elements in the document into Three.js cells.
    * This method queries the DOM for `cell` tags and calls
@@ -19,6 +20,21 @@ class JTHREE {
    * @static
    */
   static init_convert() {
+    // Add required cell styles
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = `
+      cell {
+        display: inline-block;
+        width: 100%;
+        height: 100%;
+      }
+      
+      cell > :not(canvas) {
+        display: none;
+      }
+    `;
+    document.head.appendChild(styleSheet);
+
     document.querySelectorAll('cell').forEach(el => {
       JTHREE.create_THREEJSRENDERER(el);
     });
@@ -75,6 +91,7 @@ class JTHREE {
 
     // create and track the cell
     const cell = new Cell(cellEl, renderer, scene, camera || null);
+    JTHREE.__Loaded_Cells__.set(cellEl, cell);
     return cell;
   }
 }

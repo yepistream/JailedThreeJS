@@ -1,6 +1,6 @@
+import {Cell} from "./module/index.js"
+
+console.log(Cell.getCell(document.querySelector("cell")).loadedScene);
 
 
 
-window.addEventListener("DOMContentLoaded",()=>{
-    const _TCell = window.JThree.getCell(document.querySelector("cell"));
-})

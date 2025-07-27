@@ -11,33 +11,14 @@
 </head>
 <body>
 
-    <cell width="500px" height="500px">
+    <cell>
         <DirectionalLight class="global_light"></DirectionalLight>
-        <OrthoraphicCamera render id="Main_Camera"> </OrthoraphicCamera>
-        <mesh id="building_floor" onmouseover="moveNavCube(event,-2)" onclick="placeBlock(event)" ></mesh>
-        <mesh id="ghost_nav_place_block"  ></mesh>
+        <PerspectiveCamera render id="Main_Camera"> </PerspectiveCamera>
+        <mesh id="_tTT-202_3"></mesh>
     </cell>
 
-    <script>
-        const navmeshelm = document.getElementById("ghost_nav_place_block");
-        function moveNavCube(event, offsetY=0) {
-            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},${event.pointerPosition.y.toFixed(0)-offsetY},${event.pointerPosition.z.toFixed(0)})`);
-        }
-        function placeBlock(event){
-            console.log(event);
-            const block = document.createElement('mesh');
-            block.className = "placed_block";
-            const setPos = navmeshelm.style.getPropertyValue("--position");
-            block.style.setProperty("--position",setPos);
-            block.style.setProperty("--material-color", `(${Math.random().toFixed(2)},${Math.random().toFixed(2)},${Math.random().toFixed(2)})`);
-            block.setAttribute("onmouseover","moveNavCube(event)");
-            block.setAttribute("onclick","placeBlock(event)");
-            document.querySelector("cell").appendChild(block);
-        }
-        function test(event){
-            console.log(event);
-        };
-    </script>
+    
     <script type = "module" src="./module/main.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>
