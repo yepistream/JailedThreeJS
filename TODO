@@ -1,0 +1,36 @@
+
+
+------------------------------------------------------------------
+
+    MENU:
+        1.Basics
+            -> Allow Basic Menu Implementation:
+                    A."Add"
+                        -> With A Sub-Menu For Adding Specified Object("Mesh/Light/SkeletalMesh And So On...")
+        2.Proprety's 
+            -> Side Menu For Changing Proprety's, Needs To Cycle Thru All Posible Proprety's (`!...Late Dev...!`)
+    CONTROLS:
+        2.Gizmos
+            -> Moving Objects Around Using Gizmos :
+                    A. POSITION
+                    B. ROTATION
+                    C. SCALE
+                    D. ALL_AT_ONCE (TRANSLATION)
+        3.Settings
+            -> Settings For FP-Controls :
+                    A.SENSITIVITY
+                    B.SPEED
+                    C.FOV
+                    D.,,,,,;
+    FIDDLE:
+        1.Basic
+            ->A Basic Window For Showing Off The HTML+CSS+JS In The Window By It
+        2.Live-Editing
+            ->Allow Live-Editing Of The Basic Window.
+
+------------------------------------------------------------------
+
+        
+    
+
+        

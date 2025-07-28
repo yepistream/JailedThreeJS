@@ -21,14 +21,13 @@ html, body {
 
 
 
-#Main_Camera{
-    --position: (0,-5,0);
+#Editor-Camera{
+    --position: (0,0,0);
     --refreshLook: 40;
-    --lookAt: (0,0,0);
 }
 
-#_tTT-202_3{
-    --position : (0,0,0);
+#basic_White_Cube{
+    --position : (0,0,-5);
     --geometry : @cube;
     --material-color : (1,1,1);
 }

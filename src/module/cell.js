@@ -59,6 +59,10 @@ import {
    */
   constructor(cellElm, renderer, scene, camera = null, _MainAnimMethod = null) {
     this.cellElm       = cellElm;
+    Object.defineProperty(cellElm, 'cell', {
+      value: this,
+      enumerable: false
+    });
     this.threeRenderer = renderer;
     this.loadedScene   = scene;
     this.focusedCamera = camera;
@@ -124,7 +128,8 @@ import {
         }
       });
     });
-
+    console.log(this);
+    console.log(this.loadedScene);
     // TODO: add observer for head count and cleanup unused convicts
     this._styleObserver.observe(this.cellElm, {
       attributes: true,
@@ -224,6 +229,7 @@ import {
     instance.userData.extraParams = [];
     instance.transition = null;
     parentObj.add(instance);
+    
     if (elm.id) {
       instance.userData.domId = elm.id;
       this.namedConvicts.push(instance);
@@ -242,6 +248,10 @@ import {
       const element = elm.children[i];
       this.ScanElement(element);
     }
+    Object.defineProperty(elm, 'convict', {
+      value: this.getConvictByDom(elm),
+      enumerable: false
+    });
   }
 
   /**

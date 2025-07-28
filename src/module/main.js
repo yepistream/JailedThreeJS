@@ -92,6 +92,9 @@ class JTHREE {
     // create and track the cell
     const cell = new Cell(cellEl, renderer, scene, camera || null);
     JTHREE.__Loaded_Cells__.set(cellEl, cell);
+    
+    // Dispatch "OnStart" event with the cell and element details
+    cellEl.dispatchEvent(new CustomEvent('OnStart', { detail: { cell, CellEl: cellEl } }));
     return cell;
   }
 }
