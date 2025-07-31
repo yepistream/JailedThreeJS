@@ -23,12 +23,6 @@ class JTHREE {
     // Add required cell styles
     const styleSheet = document.createElement('style');
     styleSheet.textContent = `
-      cell {
-        display: inline-block;
-        width: 100%;
-        height: 100%;
-      }
-      
       cell > :not(canvas) {
         display: none;
       }
@@ -122,7 +116,7 @@ function createWebGLOverlay(hostEl, glOptions = {}) {
   Object.assign(canvas.style, {
     position: 'absolute', top: '0', left: '0',
     width: `${width}px`, height: `${height}px`,
-    pointerEvents: 'none', zIndex: '999'
+    pointerEvents: 'none', zIndex: '-999'
   });
   hostEl.appendChild(canvas);
   const gl = canvas.getContext('webgl2', glOptions)

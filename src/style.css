@@ -8,9 +8,14 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
 
-
+cell{
+    display: inline-block;
+    width: 100%;
+    height: 100%;
+}
 
 
 .global_light{
@@ -20,17 +25,77 @@ html, body {
 }
 
 
-
-#Editor-Camera{
+#EditorCamera{
     --position: (0,0,0);
     --refreshLook: 40;
 }
 
-#basic_White_Cube{
-    --position : (0,0,-5);
-    --geometry : @cube;
-    --material-color : (1,1,1);
+
+#side-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 250px; /* initial panel width */
+    height: 100%;
+    background: #272727;
+    
+    box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+    overflow: hidden;
+    padding: 0; /* remove inner padding so that content can be repositioned */
 }
+
+/* Make the panel content not overlap the resizer */
+.panel-content {
+    margin-left: 5px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1px;
+    gap: 0;  /* Remove gap as we're using resize handles */
+}
+
+.panel-content .panel-textarea {
+    flex: 1 0 auto;
+    width: 100%;
+    height: calc(100% / 3);
+    min-height: 30px;
+    resize: none;
+    overflow: auto;
+    border: 1px solid #444;
+    background-color: #1e1e1e;
+    color: #fff;
+    padding: 0.5em;
+    font-family: 'Consolas', monospace;
+    font-size: 14px;
+}
+
+.resize-handle {
+    width: 100%;
+    height: 5px; /* Added explicit height */
+    background: #2a2a2a;
+    border-color : #1b1b1b;
+    border-width: 1px;
+    border-style: groove;
+    cursor: row-resize;
+    position: relative;
+    flex: 0 0 5px; /* Added flex-shrink: 0 to maintain height */
+}
+
+.resize-handle:hover {
+    background: #3a3a3a;
+}
+
+/* Styling for the resizer handle at the left edge of the panel */
+#panel-resizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    cursor: ew-resize;
+    background: #272727;
+}
+
 
 
 

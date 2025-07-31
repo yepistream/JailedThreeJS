@@ -8,7 +8,7 @@
 // and may be reused for your own custom animations.
 
 import { exchange_rule, deep_searchParms, CSSValueTo3JSValue } from './artist.js';
-import { AllKeyFramesMap } from './utils.js';
+import { getAnimationMap } from './utils.js';
 
 /* TODO:
  *   - Add a stop function
@@ -162,7 +162,7 @@ export function animateLerp(from, to, durationMs, onUpdate, onComplete, timingFu
  * @param {{name: string, duration: number, timing?: {fun?: string}, iteration?: {count: number|string}}} animationObj Animation settings.
  */
 export async function KeyFrameAnimationLerp(object, animationObj) {
-  const keyFramesRule = AllKeyFramesMap.get(animationObj.name);
+  const keyFramesRule = getAnimationMap(animationObj.name);
   if (!keyFramesRule) {
     throw new Error(`Animation ${animationObj.name} not found`);
   }
@@ -212,7 +212,7 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
       )
     );
   }
-  if (animationObj.iteration?.count === 'infinity') animationObj.iteration.count = Infinity;
+  if (animationObj.iteration?.count === 'infinity' || animationObj.iteration?.count === 'infinite' ) animationObj.iteration.count = Infinity;
   if (animationObj.iteration?.count > 0) {
     animationObj.iteration.count--;
     return KeyFrameAnimationLerp(object, animationObj);

@@ -258,6 +258,7 @@ export function default_onCellContextMenu_method(domEvt, cell) {
  */
 function _raycast(domEvt, camera) {
   const rect = domEvt.target.getBoundingClientRect();
+  camera.updateMatrixWorld();
   ndcPointer.set(
     ((domEvt.clientX - rect.left) / rect.width) * 2 - 1,
     (-(domEvt.clientY - rect.top) / rect.height) * 2 + 1

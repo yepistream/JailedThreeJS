@@ -5,20 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <link rel="stylesheet" href="style.css">
-
-
-
+    <style id="dynamic-style"></style>
 </head>
 <body>
 
     <cell >
         <DirectionalLight class="global_light"></DirectionalLight>
-        <PerspectiveCamera render id="Editor-Camera" > </PerspectiveCamera>
-        <mesh id="basic_White_Cube"></mesh>
+        <PerspectiveCamera render id="EditorCamera" > </PerspectiveCamera>
+        <div id="doodle-zone"></div>
     </cell>
+    <!-- Updated side panel with resizer handle -->
+    <div id="side-panel">
+      <!-- Added resizer handle -->
+      <div id="panel-resizer"></div>
+      <div class="panel-content">
+        <!-- Dividing the panel into 3 resizable textareas -->
+        <textarea class="panel-textarea" placeholder="HTML" id="HTML_Doodles"></textarea>
+        <div class="resize-handle"></div>
+        <textarea class="panel-textarea" placeholder="CSS" id="CSS_Doodles"></textarea>
+        <div class="resize-handle"></div>
+        <textarea class="panel-textarea" placeholder="JavaScript" id="JS_Doodles"></textarea>
+      </div>
+    </div>
 
 
     <script type ="module" src="./module/main.js"></script>
     <script type="module" src="script.js"></script>
+    <script id="logic-doodle-zone"></script>
 </body>
-</html> 
+</html>

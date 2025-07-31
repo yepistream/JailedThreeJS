@@ -73,13 +73,19 @@ export function deep_searchParms(object, path) {
 function _apply_rule(rule, object, _chosenOne = null) {
   if (!rule || !rule.style) return;
 
+  object.userData._lastCSS = object.userData._lastCSS || Object.create(null);
+
   // enable picking layer when event handlers are present
   if (object.userData.domEl.hasAttribute('onclick') ||
       object.userData.domEl.hasAttribute('onmouseover') ||
       object.userData.domEl.hasAttribute('ondblclick') ||
       object.userData.domEl.hasAttribute('onmousedown') ||
       object.userData.domEl.hasAttribute('onmouseup') ||
-      object.userData.domEl.hasAttribute('oncontextmenu')) {
+      object.userData.domEl.hasAttribute('oncontextmenu') || 
+      getCSSRule(`.${object.name}:hover`) ||
+      getCSSRule(`.${object.name}:focus`) ||
+      getCSSRule(`#${object.userData.domId}:focus`) ||
+      getCSSRule(`#${object.userData.domId}:hover`)) {
     object.layers.enable(3);
   } else {
     object.layers.disable(3);
@@ -88,6 +94,10 @@ function _apply_rule(rule, object, _chosenOne = null) {
   for (let i = 0; i < rule.style.length; i++) {
     const rawProp = rule.style[i];
     const value   = rule.style.getPropertyValue(rawProp).trim();
+
+    if (object.userData._lastCSS[rawProp] === value) continue;
+    object.userData._lastCSS[rawProp] = value;
+    
     const prop    = rawProp.slice(2);          // drop leading '--'
     const path    = prop.split('-');
     const parsed  = CSSValueTo3JSValue(value, object);

@@ -19,7 +19,6 @@ export let AllKeyFramesMap = new Map();
  * @returns {Map<string, CSSKeyframesRule>} A map from keyframe names to rules.
  */
 export function gatherKeyFrame_MAP() {
-  const keyframesMap = new Map();
   for (const sheet of document.styleSheets) {
     let rules;
     try {
@@ -29,11 +28,10 @@ export function gatherKeyFrame_MAP() {
     }
     for (const rule of rules) {
       if (rule.type === CSSRule.KEYFRAMES_RULE || rule.type === CSSRule.WEBKIT_KEYFRAMES_RULE) {
-        keyframesMap.set(rule.name, rule);
+        AllKeyFramesMap.set(rule.name, rule);
       }
     }
   }
-  return keyframesMap;
 }
 
 /* ───────────────── CLASS MAP ───────────────── */
@@ -58,7 +56,6 @@ function buildClassMap() {
       m[key.toUpperCase()] = THREE[key];
       return m;
     }, Object.create(null));
-  AllKeyFramesMap = gatherKeyFrame_MAP();
   // include the base Object3D type explicitly
   classMap.OBJECT3D = THREE.Object3D;
 }
@@ -72,6 +69,13 @@ function buildClassMap() {
 export function getClassMap() {
   if (!classMap) buildClassMap();
   return classMap;
+}
+
+export function getAnimationMap(AnimName){
+  AllKeyFramesMap = new Map();
+  gatherKeyFrame_MAP();
+  console.log(AllKeyFramesMap);
+  return AllKeyFramesMap.get(AnimName);
 }
 
 /* ───────────────── ASSET MAP ───────────────── */

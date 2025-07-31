@@ -107,36 +107,67 @@ import {
         if(mutation.target.nodeName === "CANVAS") return;
         
         switch (mutation.type) {
-            case 'childList':
+          case 'childList':
             for (let i = 0; i < mutation.addedNodes.length; i++) {
               const node = mutation.addedNodes[i];
-              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== "CANVAS") {
-              this.ScanElement(node);
-              paintSpecificMuse(this.getConvictByDom(node));
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.nodeName === "STYLE") {
+                  // observe changes in added <style> elements and repaint cell
+                  this._styleElemObserver.observe(node, {
+                    childList: true,
+                    characterData: true,
+                    subtree: true,
+                  });
+                  paintCell(this);
+                } else if (node.nodeName !== "CANVAS") {
+                  this.ScanElement(node);
+                  paintSpecificMuse(this.getConvictByDom(node));
+                }
               }
             }
             for (let i = 0; i < mutation.removedNodes.length; i++) {
               const node = mutation.removedNodes[i];
               if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== "CANVAS") {
-              this.removeConvict(this._allConvictsByDom.get(node));
+                this.removeConvict(this._allConvictsByDom.get(node));
               }
             }
             break;
           case 'attributes':
+            mutation.target.convict.userData.domId = mutation.target.id;
+            mutation.target.convict.name =  mutation.target.className;
             paintConvict(mutation.target, this);
             break;
         }
       });
     });
-    console.log(this);
-    console.log(this.loadedScene);
+    
     // TODO: add observer for head count and cleanup unused convicts
     this._styleObserver.observe(this.cellElm, {
       attributes: true,
       childList: true,
-      attributeFilter: ['style'],
+      attributeFilter: ['style','id','class'],
       subtree: true,
     });
+
+// NEW: add observer for <style> element changes
+    this._styleElemObserver = new MutationObserver((mutations) => {
+      // repaint the cell when any <style> element changes
+      paintCell(this);
+      this.classyConvicts.concat(this.namedConvicts).forEach(paintSpecificMuse);	
+    });
+    // attach the observer to all existing <style> elements within the cell
+    const observeStyleElements = (root) => {
+      const styleEls = root.querySelectorAll('style');
+      styleEls.forEach(styleEl => {
+        this._styleElemObserver.observe(styleEl, {
+          childList: true,
+          characterData: true,
+          subtree: true,
+        });
+      });
+    };
+    observeStyleElements(document.head);
+
     this._running = true;
     this._anim = _MainAnimMethod
       ? _MainAnimMethod.bind(this)
