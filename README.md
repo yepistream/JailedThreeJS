@@ -13,17 +13,16 @@ CSS-first scaffolding for Three.js. Drop a `<cell>` on the page, describe your s
 - **Assets**: Reference built-ins (`@cube`, `@plane`, `@sphere`, `@torus`) or define custom `@asset` rules that fetch GLTF/GLB/FBX/textures/audio.
 - **API access**: You can always grab the underlying `Cell`/`THREE.Object3D` to run imperative code when needed.
 
-> Philosophy: embrace HTML for structure, CSS for look, JS for intent. No DSLs, no scene JSON. When you want raw Three.js, it’s still there.
 
 ---
 
 ## Installation
 
-The repo ships as ES modules. Point your bundler (or `<script type="module">`) to the `src/module` folder.
+The repo ships as ES modules. Point your bundler (or `<script type="module">`) to the `dist/` folder.
 
 ```html
 <script type="module">
-  import { JThree } from './module/index.js';
+  import { JThree } from 'dist/index.js';
   // All <cell> elements are converted on import.
 </script>
 ```
@@ -53,7 +52,7 @@ If you add cells later (e.g. via a framework), call `JThree.init_convert()` to r
 </style>
 
 <script type="module">
-  import { Cell } from './module/index.js';
+  import { Cell } from './dist/index.js';
   const cell = Cell.getCell(document.getElementById('demo'));
   const box  = cell.getConvictById('box');
 
