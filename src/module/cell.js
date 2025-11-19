@@ -1,16 +1,22 @@
 // cell.js
 //
-// The `Cell` class controls a single `<cell>` element in the DOM.  It
-// converts nested custom elements into Three.js objects, tracks
-// references to them, runs an animation loop and responds to DOM
-// mutations and pointer events.  A cell holds lists of named and classed
-// objects (convicts), an array of per‑frame update callbacks and
-// observers for style and size changes.  See the README for usage
-// examples.
+// The Cell class drives a single <cell> element:
+// - DOM → Three.js object conversion
+// - Event wiring / raycasting integration
+// - CSS → object painting
+// - Mutation observers (DOM + <style> changes)
+// - Per-frame update callbacks
 
 import * as THREE from 'three';
-import { fastRemove_arry, getClassMap }  from './utils.js';
-import { paintCell, paintConvict, deep_searchParms, paintSpecificMuse, paintConstantMuse, getCSSRule } from './artist.js';
+import { fastRemove_arry, getClassMap } from './utils.js';
+import {
+  paintCell,
+  paintConvict,
+  deep_searchParms,
+  paintSpecificMuse,
+  paintConstantMuse,
+  getCSSRule
+} from './artist.js';
 import {
   default_onCellClick_method,
   default_onCellPointerMove_method,
@@ -20,173 +26,228 @@ import {
   default_onCellContextMenu_method
 } from './NoScope.js';
 
- class Cell {
-  /**
-   * A WeakMap associating DOM elements with their corresponding Cell
-   * instances.  Use `Cell.getCell(element)` to retrieve the cell for a
-   * given DOM node.
-   * @type {WeakMap<HTMLElement, Cell>}
-   */
+class Cell {
   static allCells = new WeakMap();
 
   /**
-   * Retrieve an existing Cell instance from an element.
-   * @param {HTMLElement} element The DOM element hosting the cell.
-   * @returns {Cell|null} The cell instance or null if none exists.
+   * Retrieve an existing Cell for a <cell> element.
+   *
+   * @param {HTMLElement} element
+   * @returns {Cell|null}
    */
   static getCell(element) {
     if (Cell.allCells.has(element)) {
       return Cell.allCells.get(element);
-    } else {
-      console.error('No Cell found with the element:', element);
-      return null;
     }
+    console.error('No Cell found with the element:', element);
+    return null;
   }
 
   /**
-   * Create a new Cell controller.  This will scan the DOM subtree,
-   * convert elements into Three.js objects, set up event listeners
-   * and start the animation loop.
-   *
-   * @param {HTMLElement} cellElm Root cell element.
-   * @param {THREE.WebGLRenderer} renderer The renderer used for this cell.
-   * @param {THREE.Scene} scene The scene to control.
-   * @param {THREE.Camera|null} [camera=null] The initial camera.  If null
-   *        then the first camera element found will become active.
-   * @param {Function|null} [_MainAnimMethod=null] Optional animation loop
-   *        override.  If supplied it is bound to this and called
-   *        instead of the default loop.
+   * @param {HTMLElement} cellElm
+   * @param {THREE.WebGLRenderer} renderer
+   * @param {THREE.Scene} scene
+   * @param {THREE.Camera|null} [camera=null]
+   * @param {Function|null} [_MainAnimMethod=null]
    */
   constructor(cellElm, renderer, scene, camera = null, _MainAnimMethod = null) {
-    this.cellElm       = cellElm;
+    this.cellElm = cellElm;
     Object.defineProperty(cellElm, 'cell', {
       value: this,
       enumerable: false
     });
+
     this.threeRenderer = renderer;
-    this.loadedScene   = scene;
+    this.loadedScene = scene;
     this.focusedCamera = camera;
+
     this.constantConvicts = [];
     this.classyConvicts = [];
-    this.namedConvicts  = [];
+    this.namedConvicts = [];
     this._allConvictsByDom = new WeakMap();
+
     this.updateFunds = [];
-    // call paintConstantMuse on constant convicts each frame
+    this._observedStyleElements = new WeakSet();
+    this._pendingStyleRepaint = false;
+
+    // paint constant :active rules each frame
     this.updateFunds.push(() => {
       this.constantConvicts.forEach(cC => {
         paintConstantMuse(cC);
       });
     });
+
     this._last_cast_caught = null;
-    Cell.allCells.set(cellElm, this);
-    // scan cell contents and build objects
-    this._ScanCell();
     this._lastHitPosition = null;
-    // bind event handlers
-    this._boundPointerMove  = (event) => { default_onCellPointerMove_method(event, this); };
-    this._boundClick        = (event) => { default_onCellClick_method(event, this); };
-    this._boundMouseDown    = (event) => { default_onCellMouseDown_method(event, this); };
-    this._boundMouseUp      = (event) => { default_onCellMouseUp_method(event, this); };
-    this._boundDoubleClick  = (event) => { default_onCellDoubleClick_method(event, this); };
-    this._boundContextMenu  = (event) => {
-      event.preventDefault();
-      default_onCellContextMenu_method(event, this);
+    Cell.allCells.set(cellElm, this);
+
+    // initial scan
+    this._ScanCell();
+
+    // bind DOM event handlers
+    this._boundPointerMove = evt => {
+      default_onCellPointerMove_method(evt, this);
     };
+    this._boundClick = evt => {
+      default_onCellClick_method(evt, this);
+    };
+    this._boundMouseDown = evt => {
+      default_onCellMouseDown_method(evt, this);
+    };
+    this._boundMouseUp = evt => {
+      default_onCellMouseUp_method(evt, this);
+    };
+    this._boundDoubleClick = evt => {
+      default_onCellDoubleClick_method(evt, this);
+    };
+    this._boundContextMenu = evt => {
+      evt.preventDefault();
+      default_onCellContextMenu_method(evt, this);
+    };
+
     cellElm.addEventListener('mousemove', this._boundPointerMove);
-    cellElm.addEventListener('click',    this._boundClick);
+    cellElm.addEventListener('click', this._boundClick);
     cellElm.addEventListener('mousedown', this._boundMouseDown);
-    cellElm.addEventListener('mouseup',   this._boundMouseUp);
-    cellElm.addEventListener('dblclick',  this._boundDoubleClick);
+    cellElm.addEventListener('mouseup', this._boundMouseUp);
+    cellElm.addEventListener('dblclick', this._boundDoubleClick);
     cellElm.addEventListener('contextmenu', this._boundContextMenu);
-    // paint initial state
+
+    // initial paint
     paintCell(this);
 
-    // observe inline style changes and child mutations
-    this._styleObserver = new MutationObserver((mutationList) => {
+    // Observe <style> content so keyframes / rules updates repaint
+    this._styleElemObserver = new MutationObserver(() => {
+      if (this._pendingStyleRepaint) return;
+      this._pendingStyleRepaint = true;
+      requestAnimationFrame(() => {
+        this._pendingStyleRepaint = false;
+        paintCell(this);
+        this.classyConvicts.concat(this.namedConvicts).forEach(paintSpecificMuse);
+      });
+    });
+
+    this._observeStyleElements = root => {
+      if (!root) return;
+      const targets = [];
+      if (root.nodeName === 'STYLE') {
+        targets.push(root);
+      } else if (typeof root.querySelectorAll === 'function') {
+        targets.push(...root.querySelectorAll('style'));
+      }
+      targets.forEach(styleEl => {
+        if (this._observedStyleElements.has(styleEl)) return;
+        this._observedStyleElements.add(styleEl);
+        this._styleElemObserver.observe(styleEl, {
+          childList: true,
+          characterData: true,
+          subtree: true
+        });
+      });
+    };
+
+    this._styleHostObserver = new MutationObserver(mutationList => {
       mutationList.forEach(mutation => {
-        if(mutation.target.nodeName === "CANVAS") return;
-        
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'STYLE') {
+            this._observeStyleElements(node);
+          }
+        });
+      });
+    });
+
+    this._observeStyleElements(this.cellElm);
+    if (document.head) {
+      this._observeStyleElements(document.head);
+      this._styleHostObserver.observe(document.head, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    // Observe inline style/id/class changes and child mutations
+    this._styleObserver = new MutationObserver(mutationList => {
+      mutationList.forEach(mutation => {
+        if (mutation.target.nodeName === 'CANVAS') return;
+
         switch (mutation.type) {
-          case 'childList':
+          case 'childList': {
             for (let i = 0; i < mutation.addedNodes.length; i++) {
               const node = mutation.addedNodes[i];
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.nodeName === "STYLE") {
-                  // observe changes in added <style> elements and repaint cell
-                  this._styleElemObserver.observe(node, {
-                    childList: true,
-                    characterData: true,
-                    subtree: true,
-                  });
+              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== 'CANVAS') {
+                if (node.nodeName === 'STYLE') {
+                  this._observeStyleElements(node);
                   paintCell(this);
-                } else if (node.nodeName !== "CANVAS") {
+                } else {
                   this.ScanElement(node);
-                  paintSpecificMuse(this.getConvictByDom(node));
+                  const convict = this.getConvictByDom(node);
+                  if (convict) {
+                    paintSpecificMuse(convict);
+                  }
                 }
               }
             }
             for (let i = 0; i < mutation.removedNodes.length; i++) {
               const node = mutation.removedNodes[i];
-              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== "CANVAS") {
+              if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== 'CANVAS') {
                 this.removeConvict(this._allConvictsByDom.get(node));
               }
             }
             break;
-          case 'attributes':
-            mutation.target.convict.userData.domId = mutation.target.id;
-            mutation.target.convict.name =  mutation.target.className;
-            paintConvict(mutation.target, this);
+          }
+          case 'attributes': {
+            const target = mutation.target;
+            const convict = target.convict;
+            if (!convict) break;
+
+            if (mutation.attributeName === 'id') {
+              convict.userData.domId = target.id;
+            } else if (mutation.attributeName === 'class') {
+              const nextClasses = Array.from(target.classList).filter(Boolean);
+              convict.userData.classList = nextClasses;
+              convict.name = nextClasses[0] || '';
+            } else if (mutation.attributeName === 'style') {
+              // inline style changed; repaint this convict
+              paintConvict(target, this);
+            }
             break;
+          }
         }
       });
     });
-    
-    // TODO: add observer for head count and cleanup unused convicts
+
     this._styleObserver.observe(this.cellElm, {
       attributes: true,
       childList: true,
-      attributeFilter: ['style','id','class'],
-      subtree: true,
+      attributeFilter: ['style', 'id', 'class'],
+      subtree: true
     });
 
-// NEW: add observer for <style> element changes
-    this._styleElemObserver = new MutationObserver((mutations) => {
-      // repaint the cell when any <style> element changes
-      paintCell(this);
-      this.classyConvicts.concat(this.namedConvicts).forEach(paintSpecificMuse);	
-    });
-    // attach the observer to all existing <style> elements within the cell
-    const observeStyleElements = (root) => {
-      const styleEls = root.querySelectorAll('style');
-      styleEls.forEach(styleEl => {
-        this._styleElemObserver.observe(styleEl, {
-          childList: true,
-          characterData: true,
-          subtree: true,
-        });
-      });
-    };
-    observeStyleElements(document.head);
-
+    // Animation loop
     this._running = true;
     this._anim = _MainAnimMethod
       ? _MainAnimMethod.bind(this)
       : () => {
           if (!this._running) return;
-          this.updateFunds.forEach(update => {
-            update();
-          });
+          this.updateFunds.forEach(update => update());
           requestAnimationFrame(this._anim);
-          this.threeRenderer.render(this.loadedScene, this.focusedCamera);
+          if (this.focusedCamera) {
+            this.threeRenderer.render(this.loadedScene, this.focusedCamera);
+          }
         };
-    // handle resizing
+
+    // Resize handling
     this._resizeObserver = new ResizeObserver(entries => {
-      for (let e of entries) {
+      for (const e of entries) {
         const { width, height } = e.contentRect;
         const dpr = window.devicePixelRatio || 1;
-        this.threeRenderer.setSize(width * dpr, height * dpr);
+        this.threeRenderer.setPixelRatio(dpr);
+
+        const safeWidth = Math.max(width, 1);
+        const safeHeight = Math.max(height, 1);
+        this.threeRenderer.setSize(safeWidth, safeHeight, false);
+
         if (this.focusedCamera && this.focusedCamera.isPerspectiveCamera) {
-          this.focusedCamera.aspect = width / height;
+          this.focusedCamera.aspect = safeWidth / safeHeight;
         }
         if (this.focusedCamera) {
           this.focusedCamera.updateProjectionMatrix();
@@ -194,12 +255,12 @@ import {
       }
     });
     this._resizeObserver.observe(this.cellElm);
+
     this._anim();
   }
 
   /**
-   * Perform the initial scan converting child elements to Three.js objects.
-   * Called once by the constructor.
+   * Initial scan of cell children.
    * @private
    */
   _ScanCell() {
@@ -210,23 +271,29 @@ import {
   }
 
   /**
-   * Convert a DOM element into a Three.js object and attach it to its
-   * parent.  If the element's tag name is unknown a warning is logged
-   * and null is returned.  Nested elements are scanned recursively.
+   * Convert a DOM element into a Three.js object and wire it up.
    *
-   * @param {HTMLElement} elm The DOM element to convert.
-   * @returns {void}
+   * @param {HTMLElement} elm
    */
   ScanElement(elm) {
+    if (this._allConvictsByDom.has(elm)) return;
+
     const parentObj = this.getConvictByDom(elm.parentElement) || this.loadedScene;
     const instance = this.ConvertDomToObject(elm);
-    if (this._allConvictsByDom.has(elm) || instance === null) {
+
+    if (instance === null) {
+      // still recurse children
+      for (let i = 0; i < elm.children.length; i++) {
+        this.ScanElement(elm.children[i]);
+      }
       return;
     }
-    // camera instantiation
+
+    // Camera tags: configure projection
     if (elm.tagName.includes('CAMERA')) {
       const rect = this.cellElm.getBoundingClientRect();
-      const aspect = rect.width / rect.height;
+      const aspect = rect.height ? rect.width / rect.height : 1;
+
       if (elm.tagName === 'PERSPECTIVECAMERA') {
         instance.fov = 75;
         instance.aspect = aspect;
@@ -236,158 +303,175 @@ import {
         const frustumSize = 20;
         instance.frustumSize = frustumSize;
         instance.aspect = aspect;
-        instance.left   = (-frustumSize * aspect) / 2;
-        instance.right  = (frustumSize * aspect) / 2;
-        instance.top    = frustumSize / 2;
+        instance.left = (-frustumSize * aspect) / 2;
+        instance.right = (frustumSize * aspect) / 2;
+        instance.top = frustumSize / 2;
         instance.bottom = -frustumSize / 2;
-        instance.refreshLook = (fSize) => {
+        instance.refreshLook = fSize => {
           instance.frustumSize = fSize;
-          instance.left   = (-fSize * instance.aspect) / 2;
-          instance.right  = (fSize * instance.aspect) / 2;
-          instance.top    = fSize / 2;
+          instance.left = (-fSize * instance.aspect) / 2;
+          instance.right = (fSize * instance.aspect) / 2;
+          instance.top = fSize / 2;
           instance.bottom = -fSize / 2;
           instance.updateProjectionMatrix();
         };
       }
+
+      const rectW = rect.width || 1;
+      const rectH = rect.height || 1;
+
       if (elm.hasAttribute('render')) {
         this.focusedCamera = instance;
         this.focusedCamera.updateProjectionMatrix();
-        this.threeRenderer.setSize(rect.width, rect.height);
-        this.threeRenderer.setPixelRatio(window.devicePixelRatio);
+        this.threeRenderer.setPixelRatio(window.devicePixelRatio || 1);
+        this.threeRenderer.setSize(rectW, rectH, false);
+      } else if (!this.focusedCamera) {
+        this.focusedCamera = instance;
+        this.focusedCamera.updateProjectionMatrix();
       }
     }
+
     instance.userData.domEl = elm;
     instance.userData.extraParams = [];
+    instance.userData.classList = [];
     instance.transition = null;
+
     parentObj.add(instance);
-    
+
     if (elm.id) {
       instance.userData.domId = elm.id;
       this.namedConvicts.push(instance);
-      if (getCSSRule(`#${elm.id}:active`)) this.constantConvicts.push(instance);
-    }
-    const cls = elm.getAttribute('class');
-    if (cls) {
-      instance.name = cls;
-      this.classyConvicts.push(instance);
-      if (!this.constantConvicts.includes(instance) && getCSSRule(`.${cls}:active`)) {
+      if (!this.constantConvicts.includes(instance) && getCSSRule(`#${elm.id}:active`)) {
         this.constantConvicts.push(instance);
       }
     }
-    this._allConvictsByDom.set(elm, instance);
-    for (let i = 0; i < elm.children.length; i++) {
-      const element = elm.children[i];
-      this.ScanElement(element);
+
+    const classList = Array.from(elm.classList || []).filter(Boolean);
+    if (classList.length) {
+      instance.userData.classList = classList;
+      instance.name = classList[0];
+      this.classyConvicts.push(instance);
+      const hasActiveRule = classList.some(cls => getCSSRule(`.${cls}:active`));
+      if (hasActiveRule && !this.constantConvicts.includes(instance)) {
+        this.constantConvicts.push(instance);
+      }
     }
-    Object.defineProperty(elm, 'convict', {
-      value: this.getConvictByDom(elm),
-      enumerable: false
-    });
+
+    this._allConvictsByDom.set(elm, instance);
+
+    for (let i = 0; i < elm.children.length; i++) {
+      this.ScanElement(elm.children[i]);
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(elm, 'convict')) {
+      Object.defineProperty(elm, 'convict', {
+        value: this.getConvictByDom(elm),
+        enumerable: false
+      });
+    }
   }
 
   /**
-   * Instantiate a Three.js object from a DOM tag.  Tag names are
-   * upper‑cased, hyphens removed and looked up in the class map.  If the
-   * tag is unknown or is `<canvas>` then null is returned.
+   * Tag → THREE.Object3D constructor.
    *
-   * @param {HTMLElement} elm The DOM element.
-   * @returns {THREE.Object3D|null} The new instance or null.
+   * @param {HTMLElement} elm
+   * @returns {THREE.Object3D|null}
    */
   ConvertDomToObject(elm) {
-    const key  = elm.tagName.replace(/-/g, '');
+    if (elm.tagName === 'CANVAS') return null;
+
+    const key = elm.tagName.replace(/-/g, '');
     const Ctor = getClassMap()[key];
     if (!Ctor) {
-      if (elm.tagName !== 'CANVAS') {
-        console.warn(`Unknown THREE class for <${elm.tagName.toLowerCase()}>`);
-      }
+      console.warn(`Unknown THREE class for <${elm.tagName.toLowerCase()}>`);
       return null;
     }
     return new Ctor();
   }
 
   /**
-   * Remove a Three.js object created from a DOM element.  Child objects
-   * are removed recursively.  References are removed from tracking arrays
-   * and the DOM element is removed from the page.  If the convict or
-   * its parent is null nothing happens.
+   * Remove a convict and its children.
    *
-   * @param {THREE.Object3D|null} convict The object to remove.
+   * @param {THREE.Object3D|null} convict
    */
   removeConvict(convict) {
     if (!convict) return;
-    convict.children.forEach(element => {
-      const childInstance = this._allConvictsByDom.get(element);
-      if (element.children.length > 0) this.removeConvict(childInstance);
+
+    convict.children.slice().forEach(child => {
+      const domNode = child.userData?.domEl;
+      if (domNode) {
+        this.removeConvict(this._allConvictsByDom.get(domNode));
+      } else {
+        this.removeConvict(child);
+      }
     });
+
     fastRemove_arry(this.classyConvicts, convict);
     fastRemove_arry(this.namedConvicts, convict);
+    fastRemove_arry(this.constantConvicts, convict);
+
     if (convict.userData.domEl) {
-      convict.userData.domEl.remove();
       this._allConvictsByDom.delete(convict.userData.domEl);
+      convict.userData.domEl.remove();
     }
+
     if (convict.parent) {
       convict.parent.remove(convict);
     }
   }
 
   /**
-   * Retrieve the Three.js object associated with a DOM element.
-   * @param {HTMLElement} element The DOM element.
-   * @returns {THREE.Object3D|undefined} The corresponding object or undefined.
+   * Get convict by DOM element.
+   *
+   * @param {HTMLElement} element
    */
   getConvictByDom(element) {
     return this._allConvictsByDom.get(element);
   }
 
   /**
-   * Retrieve an object using its DOM id.
-   * @param {string} id The element id.
-   * @returns {THREE.Object3D|undefined} The corresponding object or undefined.
+   * Get convict by DOM id (global document lookup).
+   *
+   * @param {string} id
    */
   getConvictById(id) {
-    return this._allConvictsByDom.get(document.getElementById(id));
+    const el = document.getElementById(id);
+    return el ? this._allConvictsByDom.get(el) : undefined;
   }
 
   /**
-   * Get all objects that share a class name.
-   * @param {string} className The CSS class name.
-   * @returns {Array<THREE.Object3D>} All matching objects.
+   * Get all convicts with a given class.
+   *
+   * @param {string} className
+   * @returns {Array<THREE.Object3D>}
    */
   getConvictsByClass(className) {
     const elements = Array.from(document.getElementsByClassName(className));
     const out = [];
     elements.forEach(elm => {
       const convict = this.getConvictByDom(elm);
-      if (convict) {
-        out.push(convict);
-      }
+      if (convict) out.push(convict);
     });
     return out;
   }
 
   /**
-   * Register a per‑frame callback on this cell.  The callback will be
-   * invoked on every animation frame with `this` bound to the cell.
+   * Register a per-frame callback.
    *
-   * @param {Function} fn The callback to register.
+   * @param {Function} fn
    */
   addUpdateFunction(fn) {
     if (typeof fn === 'function') {
       const bound = fn.bind(this);
-      // store the original unbound function for removal
       bound.originalFn = fn;
       this.updateFunds.push(bound);
     }
   }
 
   /**
-   * Remove a previously registered per‑frame callback from this cell.
-   * If the provided function has been bound using `addUpdateFunction`
-   * this method will remove it from the `updateFunds` array.  Note
-   * that you must provide the same function reference that was
-   * originally registered.
+   * Remove a previously registered per-frame callback.
    *
-   * @param {Function} fn The callback to remove.
+   * @param {Function} fn
    */
   removeUpdateFunction(fn) {
     const idx = this.updateFunds.findIndex(item => item?.originalFn === fn);
@@ -397,22 +481,27 @@ import {
   }
 
   /**
-   * Clean up observers and event listeners and remove the canvas from
-   * the DOM.  After calling this method the cell is effectively
-   * destroyed and should not be used again.
+   * Tear down observers, handlers and canvas.
    */
   dispose() {
     this._running = false;
+
     this._resizeObserver.disconnect();
     this._styleObserver.disconnect();
+    this._styleElemObserver.disconnect();
+    this._styleHostObserver.disconnect();
+
     this.cellElm.removeEventListener('mousemove', this._boundPointerMove);
     this.cellElm.removeEventListener('click', this._boundClick);
     this.cellElm.removeEventListener('mousedown', this._boundMouseDown);
     this.cellElm.removeEventListener('mouseup', this._boundMouseUp);
     this.cellElm.removeEventListener('dblclick', this._boundDoubleClick);
     this.cellElm.removeEventListener('contextmenu', this._boundContextMenu);
+
     const canvas = this.threeRenderer.domElement;
-    if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+    if (canvas && canvas.parentNode) {
+      canvas.parentNode.removeChild(canvas);
+    }
   }
 }
 

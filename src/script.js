@@ -1,261 +1,282 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-const EditorCameraElm = document.getElementById('EditorCamera');   // your <editor-camera> element
-const cellElement     = document.querySelector('cell');             // the DOM surface that eats input
+const cellElement = document.querySelector('cell');
+const previewCameraEl = document.getElementById('EditorCamera');
 
-// 1 -> Orientation  (pointer-lock)
-const controls = new PointerLockControls( EditorCameraElm.convict, cellElement );
+const htmlEditor = document.getElementById('HTML_Doodles');
+const cssEditor = document.getElementById('CSS_Doodles');
+const jsEditor = document.getElementById('JS_Doodles');
+const sidePanel = document.getElementById('side-panel');
+const panelResizer = document.getElementById('panel-resizer');
+const sceneNameInput = document.getElementById('scene-name');
+const resetEditorsBtn = document.getElementById('reset-editors');
+const saveBtn = document.getElementById('save-project');
+const doodleZone = document.getElementById('doodle-zone');
+const scriptHost = document.getElementById('logic-doodle-zone');
 
-// right-mouse  ->  lock / unlock
-cellElement.addEventListener('mousedown', e => {
-  if (e.button === 2) { controls.lock();   e.preventDefault(); }
-});
-document.addEventListener('mouseup',   e => {
-  if (e.button === 2) { controls.unlock(); e.preventDefault(); }
-});
-// suppress the context-menu entirely
-cellElement.addEventListener('contextmenu', e => e.preventDefault());
-
-// 2 -> WASD state
-const keys = { w:0, a:0, s:0, d:0 };
-
-window.addEventListener('keydown', e=>{
-  switch (e.code) {
-    case 'KeyW': keys.w = 1; break;
-    case 'KeyA': keys.a = 1; break;
-    case 'KeyS': keys.s = 1; break;
-    case 'KeyD': keys.d = 1; break;
+window.__JailedSceneCleanup = window.__JailedSceneCleanup || [];
+window.registerSceneCleanup = function registerSceneCleanup(fn) {
+  if (typeof fn === 'function') {
+    window.__JailedSceneCleanup.push(fn);
   }
-});
-window.addEventListener('keyup', e=>{
-  switch (e.code) {
-    case 'KeyW': keys.w = 0; break;
-    case 'KeyA': keys.a = 0; break;
-    case 'KeyS': keys.s = 0; break;
-    case 'KeyD': keys.d = 0; break;
-  }
-});
+};
 
-// 3 -> Manual translation using look-vectors
-const SPEED   = 40;                                 // world-units / second
-const clock   = new THREE.Clock();
+function runSceneCleanup() {
+  const cleaners = window.__JailedSceneCleanup;
+  while (cleaners.length) {
+    const cleaner = cleaners.pop();
+    try { cleaner(); }
+    catch (err) { console.warn('Scene cleanup failed:', err); }
+  }
+}
+
+const pointerControls = new PointerLockControls(previewCameraEl.convict, cellElement);
+const movementKeys = { w: 0, a: 0, s: 0, d: 0 };
+const keyMap = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd' };
+const clock = new THREE.Clock();
 const forward = new THREE.Vector3();
-const right   = new THREE.Vector3();
+const right = new THREE.Vector3();
 
-function __editor_camera_control_update__ () {
-
+function updateCameraControls() {
   const dt = clock.getDelta();
-  if ( !controls.isLocked ) return;                 // only move while locked
-
-  // W/S) forward  =  camera’s −Z axis in world-space
-  const cam = EditorCameraElm.convict;              // THREE.PerspectiveCamera
-  cam.getWorldDirection( forward );
-  forward.normalize();
-
-  // A/D) right  =  forward × up
-  right.copy( forward ).cross( cam.up ).normalize();
-
-  // c) accumulate movement
+  if (!pointerControls.isLocked) return;
+  const cam = previewCameraEl.convict;
+  cam.getWorldDirection(forward).normalize();
+  right.copy(forward).cross(cam.up).normalize();
   const move = new THREE.Vector3();
-  if (keys.w) move.add( forward );
-  if (keys.s) move.sub( forward );
-  if (keys.a) move.sub( right   );
-  if (keys.d) move.add( right   );
-
+  if (movementKeys.w) move.add(forward);
+  if (movementKeys.s) move.sub(forward);
+  if (movementKeys.a) move.sub(right);
+  if (movementKeys.d) move.add(right);
   if (move.lengthSq()) {
-    move.normalize().multiplyScalar( SPEED * dt );
-    
-    const currentCamPos = EditorCameraElm.convict.position.clone();
-
-    currentCamPos.add(move);
-
-    EditorCameraElm.style.setProperty("--position",`(${currentCamPos.x},${currentCamPos.y},${currentCamPos.z})`);
+    move.normalize().multiplyScalar(30 * dt);
+    const next = cam.position.clone().add(move);
+    previewCameraEl.style.setProperty('--position', `(${next.x},${next.y},${next.z})`);
   }
 }
 
-cellElement.cell.addUpdateFunction( __editor_camera_control_update__ );
-
-const sidePanel = document.getElementById("side-panel");
-
-// Implement resizable panel behavior
-const panelResizer = document.getElementById("panel-resizer");
-
-let isResizing = false;
-
-panelResizer.addEventListener('mousedown', (e) => {
-  isResizing = true;
-  document.body.style.cursor = "ew-resize";
-  e.preventDefault();
+cellElement.cell.addUpdateFunction(updateCameraControls);
+cellElement.addEventListener('contextmenu', e => e.preventDefault());
+cellElement.addEventListener('mousedown', e => {
+  if (e.button === 2) {
+    pointerControls.lock();
+    e.preventDefault();
+  }
 });
-
-document.addEventListener('mousemove', (e) => {
-  if (!isResizing) return;
-  // New width = distance from right edge to mouse X position
-  let newWidth = window.innerWidth - e.clientX;
-  // Clamp the width between a minimum of 5px (grab area) and, say, 500px maximum.
-  newWidth = Math.min(Math.max(newWidth, 5), 500);
-  sidePanel.style.width = newWidth + "px";
-});
-
-document.addEventListener('mouseup', () => {
-  if (isResizing) {
-    document.body.style.cursor = "default";
-    isResizing = false;
+document.addEventListener('mouseup', e => {
+  if (e.button === 2) {
+    pointerControls.unlock();
+    e.preventDefault();
   }
 });
 
-// Update textarea resize functionality
-const resizeHandles = document.querySelectorAll('.resize-handle');
-const textareas = document.querySelectorAll('.panel-textarea');
-let isResizingTextarea = false;
-let currentHandle = null;
-let startY = 0;
-let originalHeights = [];
-
-// Store initial heights
-textareas.forEach(textarea => {
-    originalHeights.push(textarea.offsetHeight);
+window.addEventListener('keydown', e => {
+  const key = keyMap[e.code];
+  if (key) movementKeys[key] = 1;
+});
+window.addEventListener('keyup', e => {
+  const key = keyMap[e.code];
+  if (key) movementKeys[key] = 0;
 });
 
-resizeHandles.forEach((handle, index) => {
-    handle.addEventListener('mousedown', (e) => {
-        isResizingTextarea = true;
-        currentHandle = handle;
-        startY = e.clientY;
-        // Store current heights of affected textareas
-        const prevTextarea = handle.previousElementSibling;
-        const nextTextarea = handle.nextElementSibling;
-        if (prevTextarea) originalHeights[index] = prevTextarea.offsetHeight;
-        if (nextTextarea) originalHeights[index + 1] = nextTextarea.offsetHeight;
-        document.body.style.cursor = 'row-resize';
-        e.preventDefault();
-    });
-});
-
-document.addEventListener('mousemove', (e) => {
-    if (!isResizingTextarea || !currentHandle) return;
-    
-    const prevTextarea = currentHandle.previousElementSibling;
-    const nextTextarea = currentHandle.nextElementSibling;
-    
-    if (prevTextarea && nextTextarea) {
-        const delta = e.clientY - startY;
-        const totalHeight = originalHeights[Array.from(resizeHandles).indexOf(currentHandle)] + 
-                          originalHeights[Array.from(resizeHandles).indexOf(currentHandle) + 1];
-        
-        let newPrevHeight = Math.max(30, originalHeights[Array.from(resizeHandles).indexOf(currentHandle)] + delta);
-        let newNextHeight = Math.max(30, totalHeight - newPrevHeight);
-        
-        // Hide textarea if it gets too small
-        if (newPrevHeight <= 30) prevTextarea.style.display = 'none';
-        else prevTextarea.style.display = 'block';
-        
-        if (newNextHeight <= 30) nextTextarea.style.display = 'none';
-        else nextTextarea.style.display = 'block';
-        
-        prevTextarea.style.height = `${newPrevHeight}px`;
-        nextTextarea.style.height = `${newNextHeight}px`;
-        
-        // Remove flex to maintain explicit heights
-        prevTextarea.style.flex = 'none';
-        nextTextarea.style.flex = 'none';
-    }
-});
-
-document.addEventListener('mouseup', () => {
-    isResizingTextarea = false;
-    currentHandle = null;
-    document.body.style.cursor = 'default';
-});
-
-document.addEventListener('mouseup', () => {
-    isResizingTextarea = false;
-    currentHandle = null;
-    document.body.style.cursor = 'default';
-});
-
-const HTMLDiddle = document.getElementById("HTML_Doodles");
-const JSDiddle = document.getElementById("JS_Doodles");
-const CSSDiddle = document.getElementById("CSS_Doodles");
-
-const DoodleZone_CSS = document.getElementById("doodle-zone");
-let DoodleZone_JS = document.getElementById("logic-doodle-zone");
-
-HTMLDiddle.value = `<mesh id="basic_White_Cube" onclick="shit(this)"></mesh>`;
-CSSDiddle.value = `
-
-#basic_White_Cube{
-    --position: (0,0,-5);
-    --geometry : @cube;
-    --material-color : (1,1,1);
+const DEFAULT_SCENE = {
+  name: 'Workbench',
+  html: `
+<mesh id="demo-cube"></mesh>
+<axesHelper id="axis"></axesHelper>
+`.trim(),
+  css: `
+#demo-cube {
+  --geometry: @cube;
+  --position: (0,0,-4);
+  --material-color: (0.8,0.8,0.85);
+  --material-roughness: 0.5;
+  --material-metalness: 0.15;
 }
 
-
-#basic_White_Cube:hover{
-    --material-color: (0,0,0);
+#demo-cube:hover {
+  --material-color: (0.4,0.7,1);
 }
 
-#basic_Purple_Cube{
-    --position: (0,0,-5);
-    --geometry : @cube;
-    --material-color : (1,0,1);
+#axis {
+  --scale: (2,2,2);
+  --position: (0,-0.5,-4);
+}`.trim(),
+  js: `// Write custom behaviour here.
+`
+};
+
+function RefreshHTML() {
+  doodleZone.innerHTML = htmlEditor.value;
 }
-
-    
-`;
-JSDiddle.value = `
-function shit(it){
-  it.id = "basic_Purple_Cube";
-}
-`;
-
-CSSDiddle.addEventListener("input", ()=>{
-  RefreshSTYLE();
-})
-HTMLDiddle.addEventListener("input", ()=>{
-  RefreshHTML();
-})
-
-JSDiddle.addEventListener("input", ()=>{
-  RefreshJS();
-})
 
 function RefreshSTYLE() {
-  console.log("ass");
-  const cssText = CSSDiddle.value;
   let styleTag = document.getElementById('dynamic-style');
   if (!styleTag) {
     styleTag = document.createElement('style');
     styleTag.id = 'dynamic-style';
     document.head.appendChild(styleTag);
   }
-  styleTag.textContent = cssText;
+  styleTag.textContent = cssEditor.value;
 }
-
-function RefreshHTML() {
-  console.log(cellElement.cell.loadedScene)
-  DoodleZone_CSS.innerHTML = HTMLDiddle.value;
-}
-
-// Assuming this never changes:
-const JSContainer = document.getElementById("logic-doodle-zone");
 
 function RefreshJS() {
-  // 1) Remove any previously injected doodle scripts
-  const oldScripts = JSContainer.querySelectorAll("script[data-doodle]");
-  oldScripts.forEach(s => s.remove());
-
-  // 2) Create the new <script> and mark it
-  const tempScript = document.createElement("script");
-  tempScript.setAttribute("data-doodle", "true");
-  tempScript.textContent = JSDiddle.value;
-
-  // 3) Inject it into the container
-  JSContainer.appendChild(tempScript);
+  runSceneCleanup();
+  scriptHost.querySelectorAll('script[data-doodle]').forEach(node => node.remove());
+  if (!jsEditor.value.trim()) return;
+  const script = document.createElement('script');
+  script.setAttribute('data-doodle', 'true');
+  script.textContent = jsEditor.value;
+  scriptHost.appendChild(script);
 }
 
+function setEditors(html, css, js) {
+  htmlEditor.value = html;
+  cssEditor.value = css;
+  jsEditor.value = js;
+}
 
-RefreshHTML();
-RefreshSTYLE();
-RefreshJS();
+function loadDefaultScene() {
+  sceneNameInput.value = DEFAULT_SCENE.name;
+  setEditors(DEFAULT_SCENE.html, DEFAULT_SCENE.css, DEFAULT_SCENE.js);
+  RefreshHTML();
+  RefreshSTYLE();
+  RefreshJS();
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function slugify(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'jailedthree-scene';
+}
+
+function sanitizeScript(contents) {
+  return contents.replace(/<\/script/gi, '<\\/script');
+}
+
+function buildExportMarkup(title) {
+  const safeTitle = escapeHtml(title || 'JailedThreeJS Scene');
+  const userCss = cssEditor.value;
+  const userHtml = htmlEditor.value;
+  const userJs = jsEditor.value;
+  const baseCss = `
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:#02060f;color:#fefefe;}
+cell{display:block;width:100%;height:100%;}
+.global_light{--color:(1,1,1);--intensity:(10);--position-set:(1,10,1);}`.trim();
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>${safeTitle}</title>
+  <style>
+${baseCss}
+${userCss}
+  </style>
+</head>
+<body>
+  <cell>
+    <DirectionalLight class="global_light"></DirectionalLight>
+    <PerspectiveCamera render id="ExportCamera"></PerspectiveCamera>
+    <div id="doodle-zone">
+${userHtml}
+    </div>
+  </cell>
+  <script type="module" src="./module/main.js"></script>
+  <script>
+    window.__JailedSceneCleanup = window.__JailedSceneCleanup || [];
+    window.registerSceneCleanup = function(fn){ if(typeof fn === 'function'){ window.__JailedSceneCleanup.push(fn); } };
+  </script>
+  ${userJs.trim() ? `<script>
+${sanitizeScript(userJs)}
+  </script>` : ''}
+</body>
+</html>`;
+}
+
+function downloadScene() {
+  const markup = buildExportMarkup(sceneNameInput.value.trim());
+  const blob = new Blob([markup], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slugify(sceneNameInput.value.trim())}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+htmlEditor.addEventListener('input', RefreshHTML);
+cssEditor.addEventListener('input', RefreshSTYLE);
+jsEditor.addEventListener('input', RefreshJS);
+resetEditorsBtn.addEventListener('click', loadDefaultScene);
+saveBtn.addEventListener('click', downloadScene);
+
+let resizingPanel = false;
+panelResizer.addEventListener('mousedown', e => {
+  resizingPanel = true;
+  document.body.style.cursor = 'ew-resize';
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!resizingPanel) return;
+  const width = Math.min(Math.max(window.innerWidth - e.clientX, 280), 640);
+  sidePanel.style.width = `${width}px`;
+});
+
+document.addEventListener('mouseup', () => {
+  if (resizingPanel) {
+    document.body.style.cursor = 'default';
+    resizingPanel = false;
+  }
+  if (activeHandle) {
+    document.body.style.cursor = 'default';
+    activeHandle = null;
+  }
+});
+
+let activeHandle = null;
+let handleStartY = 0;
+
+document.querySelectorAll('.resize-handle').forEach(handle => {
+  handle.addEventListener('mousedown', e => {
+    const prev = document.getElementById(handle.dataset.prev);
+    const next = document.getElementById(handle.dataset.next);
+    if (!prev || !next) return;
+    activeHandle = {
+      prev,
+      next,
+      prevStart: prev.offsetHeight,
+      nextStart: next.offsetHeight
+    };
+    handleStartY = e.clientY;
+    document.body.style.cursor = 'row-resize';
+    e.preventDefault();
+  });
+});
+
+document.addEventListener('mousemove', e => {
+  if (!activeHandle) return;
+  const delta = e.clientY - handleStartY;
+  const prevHeight = Math.max(120, activeHandle.prevStart + delta);
+  const nextHeight = Math.max(120, activeHandle.nextStart - delta);
+  activeHandle.prev.style.height = `${prevHeight}px`;
+  activeHandle.next.style.height = `${nextHeight}px`;
+  activeHandle.prev.style.flex = 'none';
+  activeHandle.next.style.flex = 'none';
+});
+
+loadDefaultScene();

@@ -1,140 +1,134 @@
 // main.js
 //
-// The `JTHREE` class is a facade that scans the page for `<cell>`
-// elements and constructs a Three.js renderer and scene for each.  It
-// exposes a single static method, `init_convert()`, which you can call to
-// (re)initialise your page.  Cells are created automatically when this
-// module is imported.
+// JThree facade: finds <cell> elements, bootstraps renderer/scene/cell
+// for each, and keeps a WeakMap of created Cell instances.
 
 import * as THREE from 'three';
 import Cell from './cell.js';
 
 class JTHREE {
   static __Loaded_Cells__ = new WeakMap();
+  static __StyleTag__ = null;
+
   /**
-   * Convert all `<cell>` elements in the document into Three.js cells.
-   * This method queries the DOM for `cell` tags and calls
-   * `create_THREEJSRENDERER` for each.  You can call it manually after
-   * dynamically inserting new cell elements.
-   *
-   * @static
+   * Convert all <cell> elements in the document.
    */
   static init_convert() {
-    // Add required cell styles
-    const styleSheet = document.createElement('style');
-    styleSheet.textContent = `
-      cell > :not(canvas) {
-        display: none;
-      }
-    `;
-    document.head.appendChild(styleSheet);
+    if (!JTHREE.__StyleTag__ && document.head) {
+      const styleSheet = document.createElement('style');
+      styleSheet.textContent = `
+        cell > :not(canvas) {
+          display: none;
+        }
+      `;
+      document.head.appendChild(styleSheet);
+      JTHREE.__StyleTag__ = styleSheet;
+    }
 
     document.querySelectorAll('cell').forEach(el => {
+      if (JTHREE.__Loaded_Cells__.has(el)) return;
       JTHREE.create_THREEJSRENDERER(el);
     });
   }
 
   /**
-   * Legacy alias for {@link init_convert}.  Older examples may still
-   * reference `_convert_init_()` when initialising a page.  This
-   * alias ensures backwards compatibility by delegating to
-   * {@link init_convert}.  You should use {@link init_convert} in
-   * new code.
-   *
-   * @static
+   * Legacy alias.
    */
   static _convert_init_() {
     return JTHREE.init_convert();
   }
 
   /**
-   * Initialise a WebGL renderer and scene for a cell element.
-   * If the cell does not contain a camera element then a default
-   * `PerspectiveCamera` is created.  The returned renderer and scene
-   * are passed into the `Cell` constructor.  A `Cell` instance is
-   * returned so that the caller can register update functions or access
-   * its properties.
+   * Create renderer + scene for a given <cell> element.
    *
-   * @param {HTMLElement} cellEl The DOM element acting as the cell root.
-   * @returns {Cell} The created cell instance.
+   * @param {HTMLElement} cellEl
+   * @returns {Cell}
    */
   static create_THREEJSRENDERER(cellEl) {
-    const { canvas } = createWebGLOverlay(cellEl);
+    if (JTHREE.__Loaded_Cells__.has(cellEl)) {
+      return JTHREE.__Loaded_Cells__.get(cellEl);
+    }
+
+    const { canvas, width, height, dpr } = createWebGLOverlay(cellEl);
+    const safeWidth = width || 1;
+    const safeHeight = height || 1;
+
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    const dpr = window.devicePixelRatio || 1;
-    renderer.setSize(canvas.width, canvas.height);
     renderer.setPixelRatio(dpr);
+    renderer.setSize(safeWidth, safeHeight, false);
     renderer.setClearColor(0x000000, 1);
 
-    // placeholder for supporting multiple scenes.  At present only one
-    // `<scene>` element is used and all objects are added to it.
     const scene = new THREE.Scene();
 
-    // Look for cameras defined inside the cell.  A camera is found if
-    // its tag name, id or class contains the substring "camera".
+    // Find explicit cameras
     const regex = /camera/i;
     const foundCameraElms = Array.from(cellEl.children).filter(child =>
-      regex.test(child.tagName) || regex.test(child.id) || regex.test(child.className)
+      regex.test(child.tagName) ||
+      regex.test(child.id) ||
+      regex.test(child.className)
     );
 
     let camera = null;
     if (foundCameraElms.length === 0) {
-      camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(75, safeWidth / safeHeight, 0.1, 1000);
       console.warn('No camera found for', cellEl, '. Creating a default camera.');
     }
 
-    // create and track the cell
     const cell = new Cell(cellEl, renderer, scene, camera || null);
     JTHREE.__Loaded_Cells__.set(cellEl, cell);
-    
-    // Dispatch "OnStart" event with the cell and element details
-    cellEl.dispatchEvent(new CustomEvent('OnStart', { detail: { cell, CellEl: cellEl } }));
+
+    cellEl.dispatchEvent(
+      new CustomEvent('OnStart', { detail: { cell, CellEl: cellEl } })
+    );
+
     return cell;
   }
 }
 
 /**
- * Create a WebGL canvas overlay on a host element.  This helper creates
- * an absolutely positioned `<canvas>` on top of the supplied host element
- * and returns both the canvas and its WebGL context.  The canvas is
- * automatically sized to match the host element.
+ * Create a WebGL canvas overlay on a host element.
  *
- * @param {HTMLElement} hostEl The element to attach the canvas to.
- * @param {Object} [glOptions={}] Optional WebGL context options.
- * @returns {{canvas: HTMLCanvasElement, gl: WebGLRenderingContext}} An
- *          object containing the canvas and its context.
+ * @param {HTMLElement} hostEl
+ * @param {Object} [glOptions={}]
+ * @returns {{canvas:HTMLCanvasElement, gl:WebGLRenderingContext, width:number, height:number, dpr:number}}
  */
 function createWebGLOverlay(hostEl, glOptions = {}) {
   const { width, height } = hostEl.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
+
   if (getComputedStyle(hostEl).position === 'static') {
     hostEl.style.position = 'relative';
   }
+
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
   Object.assign(canvas.style, {
-    position: 'absolute', top: '0', left: '0',
-    width: `${width}px`, height: `${height}px`,
-    pointerEvents: 'none', zIndex: '-999'
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: `${width}px`,
+    height: `${height}px`,
+    pointerEvents: 'none',
+    //zIndex: '-999'
   });
+
   hostEl.appendChild(canvas);
-  const gl = canvas.getContext('webgl2', glOptions)
-            || canvas.getContext('webgl', glOptions)
-            || canvas.getContext('experimental-webgl', glOptions);
-  if (!gl) throw new Error("Your browser doesn’t support WebGL.");
+
+  const gl =
+    canvas.getContext('webgl2', glOptions) ||
+    canvas.getContext('webgl', glOptions) ||
+    canvas.getContext('experimental-webgl', glOptions);
+
+  if (!gl) {
+    throw new Error('Your browser doesn’t support WebGL.');
+  }
+
   gl.viewport(0, 0, canvas.width, canvas.height);
-  return { canvas, gl };
+  return { canvas, gl, width, height, dpr };
 }
 
-// initialise on module load
-//
-// When this module is imported it automatically scans the DOM for
-// `<cell>` elements and converts them into Three.js scenes.  This
-// behaviour mimics the old `_convert_init_()` API which users
-// previously had to call manually.  If additional cells are added to
-// the DOM after load you can still call `JThree.init_convert()` to
-// convert them.
+// Auto-initialise on import.
 JTHREE.init_convert();
 window.JThree = JTHREE;
 
