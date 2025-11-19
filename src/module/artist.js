@@ -1,28 +1,139 @@
-
-/* TODO : 
-      1.Change Active: To Clicked: 
-      2.Active Will Push The _Apply_Rule_ To A _Animation_Arry_ (In Cell.js).
-*/
-
-
 // artist.js
+//
+// Maps CSS custom properties + selectors to Three.js objects.
+// Handles:
+// - CSS → Three value conversion
+// - Transition interpolation
+// - Keyframe-driven animations
+// - Pseudo-class painting (:hover, :focus, :active)
+
 import { getAsset } from './utils.js';
 import Cell from './cell.js';
 import { animateLerp, KeyFrameAnimationLerp } from './Train.js';
-import * as THREE from '../../node_modules/three/build/three.module.js';
+import * as THREE from 'three';
+
+function getObjectClassSelectors(object) {
+  const list = object?.userData?.classList;
+  if (Array.isArray(list) && list.length > 0) return list;
+  return object?.name ? [object.name] : [];
+}
+
+function hasClassPseudoRule(object, pseudo) {
+  return getObjectClassSelectors(object).some(cls => getCSSRule(`.${cls}${pseudo}`));
+}
+
+function parseAnimationCSS(value) {
+  if (!value) return null;
+
+  const lower = value.trim().toLowerCase();
+  if (!lower || lower === 'none') return null;
+
+  const parts = lower.split(/\s+/).filter(Boolean);
+  if (!parts.length) return null;
+
+  // First token = name (keep original case for the keyframe name)
+  const nameToken = parts.shift();
+  if (!nameToken) return null;
+
+  let durationMs = 1000;     // default 1s
+  let timingFun = 'linear';  // default timing
+  let iterationCount = 1;    // default once
+
+  // Duration
+  if (parts.length) {
+    const timeToken = parts[0];
+    if (/\d/.test(timeToken)) {
+      parts.shift();
+      if (timeToken.endsWith('ms')) {
+        durationMs = parseFloat(timeToken);
+      } else if (timeToken.endsWith('s')) {
+        durationMs = parseFloat(timeToken) * 1000;
+      } else {
+        durationMs = parseFloat(timeToken);
+      }
+    }
+  }
+
+  // Look for "infinite"/"infinity" in the remaining tokens
+  const infIndex = parts.findIndex(t => t === 'infinite' || t === 'infinity');
+  if (infIndex !== -1) {
+    iterationCount = 'infinite';
+    parts.splice(infIndex, 1);
+  } else if (parts.length) {
+    const maybeCount = parseInt(parts[parts.length - 1], 10);
+    if (Number.isFinite(maybeCount) && maybeCount > 0) {
+      iterationCount = maybeCount;
+      parts.pop();
+    }
+  }
+
+  // Whatever is left becomes the timing function string
+  if (parts.length) {
+    timingFun = parts.join(' ');
+  }
+
+  return {
+    name: nameToken,
+    duration: durationMs,
+    iteration: { count: iterationCount },
+    timing: { fun: timingFun }
+  };
+}
 
 
-/** Find first rule whose selectorText tokens include `selector` */
-// Locate a CSS rule by selector text
-// #param selector - selector to look for
+
+function parseTransitionCSS(value) {
+  if (!value) return null;
+
+  const lower = value.trim().toLowerCase();
+  if (!lower || lower === 'none') return null;
+
+  const parts = lower.split(/\s+/).filter(Boolean);
+  if (!parts.length) return null;
+
+  const timeToken = parts.shift();
+  let durationMs;
+
+  if (timeToken.endsWith('ms')) {
+    durationMs = parseFloat(timeToken);
+  } else if (timeToken.endsWith('s')) {
+    durationMs = parseFloat(timeToken) * 1000;
+  } else {
+    durationMs = parseFloat(timeToken);
+  }
+
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return null;
+  }
+
+  const timingFun = parts.join(' ') || 'linear';
+
+  return {
+    duration: durationMs,
+    timing: { fun: timingFun }
+  };
+}
+
+
+/**
+ * Find first CSS rule whose selector list contains `selector` token.
+ *
+ * @param {string} selector
+ * @returns {CSSStyleRule|undefined}
+ */
 export function getCSSRule(selector) {
-  for (let sheet of document.styleSheets) {
+  for (const sheet of document.styleSheets) {
     let rules;
-    try { rules = sheet.cssRules; }
-    catch { continue; }
-    for (let rule of rules) {
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      // cross-origin stylesheet
+      continue;
+    }
+    for (const rule of rules) {
       if (!rule.selectorText) continue;
-      for (let sel of rule.selectorText.split(',')) {
+      const selectors = rule.selectorText.split(',');
+      for (const sel of selectors) {
         if (sel.trim().split(/\s+/).includes(selector)) {
           return rule;
         }
@@ -31,15 +142,15 @@ export function getCSSRule(selector) {
   }
 }
 
-
-
-
-/** Walk `object` along `path` array, returning parent + final key */
-// Walk `object` along `path` array, returning parent + final key
-// #param object - root object
-// #param path - array of keys
+/**
+ * Walk an object path and return parent + final key.
+ *
+ * @param {Object} object
+ * @param {string[]} path
+ * @returns {{parent:Object, key:string}}
+ */
 export function deep_searchParms(object, path) {
-  const key    = path[path.length - 1];
+  const key = path[path.length - 1];
   const parent = path.slice(0, -1).reduce((o, k) => {
     if (o[k] == null) o[k] = {};
     return o[k];
@@ -48,245 +159,334 @@ export function deep_searchParms(object, path) {
 }
 
 /**
- * Apply a CSS custom-prop rule to a THREE object.
- * Supports `--foo-bar: value;` → object.foo.bar = parsedValues
- * #param rule - CSSStyleRule to apply
- * #param object - target THREE object
- * #param _chosenOne - selector that triggered the rule
+ * Convert CSS value → Three.js friendly value.
+ *
+ * - "(1,2,3)" → [1,2,3]
+ * - "1.25"     → 1.25
+ * - "@foo"     → asset from getAsset('foo')
+ * - "#id-..."  → property copied from another convict in the same cell
+ *
+ * @param {string} value
+ * @param {THREE.Object3D|null} [__object=null]
+ * @returns {any}
+ */
+export function CSSValueTo3JSValue(value, __object = null) {
+  let parsed;
+
+  if (/^\(.+\)$/.test(value)) {
+    parsed = value.slice(1, -1).split(',').map(v => parseFloat(v.trim()));
+  } else if (!Number.isNaN(parseFloat(value))) {
+    parsed = parseFloat(value);
+  } else {
+    parsed = value.replace(/^['"]|['"]$/g, '');
+  }
+
+  if (typeof parsed === 'string') {
+    switch (parsed[0]) {
+      case '@': {
+        const p = parsed.slice(1);
+        return getAsset(p);
+      }
+      case '#': {
+        if (!__object) {
+          console.error('CSSValueTo3JSValue: __object is null when resolving', parsed);
+          return null;
+        }
+        try {
+          const cellElement = __object.userData.domEl.closest('cell');
+          const actualCellObject = Cell.getCell(cellElement);
+          const path = parsed.split('-');
+          if (path.length < 1) {
+            throw new Error('Requesting empty paths using "#" is not allowed');
+          }
+          const targetObject = actualCellObject.getConvictById(path[0].slice(1));
+          if (!targetObject) {
+            throw new Error('Failed to find object with id ' + parsed);
+          }
+          path.shift();
+          const { parent, key } = deep_searchParms(targetObject, path);
+          return parent[key];
+        } catch (err) {
+          console.error(err);
+          return undefined;
+        }
+      }
+      default:
+        break;
+    }
+  }
+
+  return parsed;
+}
+
+/**
+ * Assign a value to a property, handling vectors / setters / plain fields.
+ *
+ * @param {Object} parent
+ * @param {string} key
+ * @param {any} value
+ */
+export function exchange_rule(parent, key, value) {
+  if (!parent) return;
+  const target = parent[key];
+
+  try {
+    if (Array.isArray(value)) {
+      if (target && typeof target.set === 'function') {
+        target.set(...value);
+      } else if (typeof target === 'function') {
+        target(...value);
+      } else {
+        parent[key] = value;
+      }
+      return;
+    }
+
+    // scalar or non-array
+    if (target && typeof target.set === 'function') {
+      target.set(value);
+    } else if (typeof target === 'function') {
+      target(value);
+    } else {
+      parent[key] = value;
+    }
+  } catch (err) {
+    console.warn(`Failed to assign ${key} with`, value, err);
+  }
+}
+
+/**
+ * Core rule application.
+ *
+ * @param {CSSStyleRule|HTMLElement} rule
+ * @param {THREE.Object3D} object
+ * @param {string|null} [_chosenOne=null] selector that caused this rule
  */
 function _apply_rule(rule, object, _chosenOne = null) {
-  if (!rule || !rule.style) return;
-  
-  if(object.userData.domEl.hasAttribute('onclick') || object.userData.domEl.hasAttribute('onmouseover') ){
+  if (!rule || !rule.style || !object) return;
+
+  const domEl = object.userData.domEl;
+  object.userData._lastCSS = object.userData._lastCSS || Object.create(null);
+
+  // enable picking layer when interactive / pseudo-rules exist
+  if (
+    domEl?.hasAttribute('onclick') ||
+    domEl?.hasAttribute('onmouseover') ||
+    domEl?.hasAttribute('ondblclick') ||
+    domEl?.hasAttribute('onmousedown') ||
+    domEl?.hasAttribute('onmouseup') ||
+    domEl?.hasAttribute('oncontextmenu') ||
+    hasClassPseudoRule(object, ':hover') ||
+    hasClassPseudoRule(object, ':focus') ||
+    (object.userData.domId && getCSSRule(`#${object.userData.domId}:focus`)) ||
+    (object.userData.domId && getCSSRule(`#${object.userData.domId}:hover`))
+  ) {
     object.layers.enable(3);
-  }
-  else{
+  } else {
     object.layers.disable(3);
   }
 
-
   for (let i = 0; i < rule.style.length; i++) {
-    const rawProp = rule.style[i];                   // e.g. "--rotation-x"
-    const value   = rule.style.getPropertyValue(rawProp).trim();
-    const prop    = rawProp.slice(2);                // "rotation-x"
-    const path    = prop.split('-');                 // ["rotation","x"]
-    let parsed;
+  const rawProp = rule.style[i];
+  const value = rule.style.getPropertyValue(rawProp).trim();
 
-    parsed = CSSValueTo3JSValue(value,object);
-    
-    const { parent, key } = deep_searchParms(object, path);
+  if (!rawProp.startsWith('--')) continue;
 
-    // Apply logic TODO : Add Disable Transition Logic.
-    if(object.transition !== null && object.transition !== undefined)
-      {
-        animateLerp(
-          parent[key].toArray instanceof Function ? parent[key].toArray() : parent[key],
-          parsed,
-          object.transition.duration || 0,
-          (value, t) => {
-              //console.log(`t=${t.toFixed(2)}: ${value}`);
-              exchange_rule(parent,key,value);
-              //TODO : Add Event Dispatch For A Finished Transition.
-              
-          },
-          (og) => {
-              object.dispatchEvent(
-                {
-                  type: "TransitionFinished",
-                  target : object,
-                  detail : {
-                    Selector : _chosenOne,
-                    from : og,
-                    to : parent
-                  }
-                }
-              );
-          },
-          object.transition.timing.fun || 'linear'
-        );
-      } 
-    else exchange_rule(parent,key,parsed);
+  // CSS-driven transition config
+  if (rawProp === '--transition') {
+    const cfg = parseTransitionCSS(value);
+    object.transition = cfg;       // may be null if "none"
+    continue;
   }
-  if(object.animation){
-    KeyFrameAnimationLerp(object,object.animation);
-  }
-}
 
-// Convert CSS property values into Three.js compatible values
-// #param value - raw CSS value
-// #param __object - reference object for lookups
-export function CSSValueTo3JSValue(value, __object = null){
-  // Parse values: (x,y,z), number, or string
-  let parsed;
-    if (/^\(.+\)$/.test(value)) {
-      parsed = value.slice(1, -1).split(',').map(v => parseFloat(v.trim()));
-    } else if (!isNaN(parseFloat(value))) {
-      parsed = parseFloat(value);
+  // CSS-driven animation config
+  if (rawProp === '--animation') {
+    const animCfg = parseAnimationCSS(value);
+    object.animation = animCfg;    // may be null if "none"
+    continue;
+  }
+
+  // Normal custom property flow (position, rotation, etc.)
+  const prop = rawProp.slice(2);
+  const path = prop.split('-');
+  const parsed = CSSValueTo3JSValue(value, object);
+  const { parent, key } = deep_searchParms(object, path);
+
+  const assignValue = (resolvedValue) => {
+    if (resolvedValue === undefined) return;
+
+    const transition = object.transition;
+    const currentRaw = parent[key];
+    const currentValue =
+      currentRaw && typeof currentRaw.toArray === 'function'
+        ? currentRaw.toArray()
+        : currentRaw;
+
+    const duration = transition?.duration ?? 0;
+    const timingFn = transition?.timing?.fun ?? 'linear';
+    const isAnimatable =
+      transition &&
+      duration > 0 &&
+      (typeof currentValue === 'number' || Array.isArray(currentValue)) &&
+      (typeof resolvedValue === 'number' || Array.isArray(resolvedValue));
+
+    if (isAnimatable) {
+      animateLerp(
+        currentValue,
+        resolvedValue,
+        duration,
+        v => exchange_rule(parent, key, v),
+        () => {
+          object.dispatchEvent({
+            type: 'TransitionFinished',
+            target: object,
+            detail: { selector: _chosenOne, to: parent }
+          });
+        },
+        timingFn
+      );
     } else {
-      parsed = value.replace(/^['"]|['"]$/g, '');
+      exchange_rule(parent, key, resolvedValue);
     }
+  };
 
-    // Support @cube or other assets
-    if (typeof parsed === "string") {
-      switch(parsed[0]){
-        case '@':
-          const p_t = parsed.replace("@", '');
-          parsed = getAsset(p_t);
-          break;
-
-        case '#':
-            if(__object){
-              try {
-                const cellElement = __object.userData.domEl.closest("cell");
-                const actualCellObject = Cell.getCell(cellElement);
-                //console.log(actualCellObject);
-                const path = parsed.split('-');
-
-                if(path.length < 1){
-                  throw new Error("Requesting Empty Paths Using The Finder-Keeper's Letter ('#') Is Not Allowed (Example Path : '#SomeIdOfObject-position')");
-                }
-
-                const actuall_object = actualCellObject.getConvictById(path[0].replace('#',''));
-
-                if(actuall_object){
-                  path.shift();
-                  const {parent , key } = deep_searchParms(actuall_object,path);
-                  //console.log(parent," <-- P | K --> ",key);
-                  //console.log(parent[key]);
-                  return parent[key];
-                } else {
-                  throw new Error("Failed To Find The Finder-Keeper's Object For Exchange Between : " + __object + ' and the address of ' + parsed);
-                }
-              } catch (err) {
-                console.error(err);
-              }
-              return;
-            }
-            else{console.error("ERROR : WunderWaffen Of An Error, REPORT THIS AS A CRITICAL +-+> BUG ", __object);
-              return null;
-            }
-          break;
-        default:
-          //Returns As String...
-          break;
-      }
-    }
-  return parsed
-}
-
-// Assign a value to a property, supporting vectors and setter functions
-// #param parent - target object
-// #param key - property name
-// #param value - value or array of values
-export function exchange_rule(parent,key,value){
-    // TODO: In Case Of Performance Issues, Start Caching the stuff that passes thru when transitioning so that it dosen't need to run thru this if check hell, otherwise go fuck yourself.
-    if (Array.isArray(value) && typeof parent[key] === 'function') {
-
-      const inCaseIFuckUp = parent?.clone();
-      parent[key](...value); // function like lookAt()
-
-      if(Number.isNaN(parent) || parent === undefined) {
-        //console.log(new parent.constructor(value[0],value[1],value[2]))
-        parent.copy(inCaseIFuckUp.add(new parent.constructor(value[0],value[1],value[2])))
-      }
-      return;
-    } else if (typeof parent[key]?.set === 'function') {
-      
-      if (Array.isArray(value)) {
-        parent[key].set(...value); // Vector3.set(x, y, z)
-        
-      } else {
-        parent[key].set(value);    // Color.set("white")
-      }
-      return;
-    }
-    else {
-      
-        try {
-          if(typeof parent[key] === 'function'){ 
-            parent[key](value);
-          }
-          else{
-            parent[key] = value;
-          }
-        } catch (err) {
-          console.warn(`Failed to assign "${path.join('.')}" with`, value, err);
-        }
-        return;
-      }
-      console.error("Failed to parse rule with Parent : ", parent, ";\nkey of : ", key ,";\nWhilist Trying To Assign This Value To it: ", key);
+  if (parsed && typeof parsed.then === 'function') {
+    parsed.then(assignValue).catch(err =>
+      console.error('Failed to resolve asset for', rawProp, err)
+    );
+  } else {
+    assignValue(parsed);
   }
+}
+  
 
-// Apply styles for a specific element inside a cell
-// #param convictElm - DOM element
-// #param cell - owning Cell instance
-export function paintConvict(convictElm,cell){
-  _apply_rule(convictElm,cell._allConvictsByDom.get(convictElm))
+
+ if (object.animation) {
+    // Don't restart the animation every repaint
+    if (!object.userData._animationRunning) {
+      object.userData._animationRunning = true;
+
+      (async () => {
+        try {
+          await KeyFrameAnimationLerp(object, object.animation);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          // For infinite animations this never runs, which is fine:
+          // we keep the flag true and never restart.
+          object.userData._animationRunning = false;
+        }
+      })();
+    }
+  }
 }
 
-// Apply extra state-based styles to all objects in a cell
-// #param muse - Cell instance
-export function paintExtraCell(muse){
-  for (let obj of muse.classyConvicts) {
-    obj.userData.extraParams.forEach(param => {
-      const rule = getCSSRule(`.${obj.name}${param}`);
-      if (rule) _apply_rule(rule, obj);
+/**
+ * Apply rules for a specific element inside a cell (inline style changes).
+ *
+ * @param {HTMLElement} convictElm
+ * @param {Cell} cell
+ */
+export function paintConvict(convictElm, cell) {
+  const convict = cell._allConvictsByDom.get(convictElm);
+  if (convict) {
+    _apply_rule(convictElm, convict);
+  }
+}
+
+/**
+ * Paint :hover / :focus / :active selectors for all convicts in a cell.
+ *
+ * @param {Cell} muse
+ */
+export function paintExtraCell(muse) {
+  for (const obj of muse.classyConvicts) {
+    const classes = getObjectClassSelectors(obj);
+    (obj.userData.extraParams || []).forEach(param => {
+      classes.forEach(cls => {
+        const rule = getCSSRule(`.${cls}${param}`);
+        if (rule) _apply_rule(rule, obj);
+      });
     });
   }
-  for (let obj of muse.namedConvicts) {
+
+  for (const obj of muse.namedConvicts) {
     if (!obj.userData.domId) continue;
-    obj.userData.extraParams.forEach(param => {
+    (obj.userData.extraParams || []).forEach(param => {
       const rule = getCSSRule(`#${obj.userData.domId}${param}`);
       if (rule) _apply_rule(rule, obj);
     });
   }
 }
 
-// Paint all objects in a cell based on class/id rules
-// #param muse - Cell instance
+/**
+ * Paint base class/id rules for an entire cell.
+ *
+ * @param {Cell} muse
+ */
 export function paintCell(muse) {
-  for (let obj of muse.classyConvicts) {
-    const rule = getCSSRule(`.${obj.name}`);
-    if (rule) _apply_rule(rule, obj, `.${obj.name}`);
+  for (const obj of muse.classyConvicts) {
+    for (const cls of getObjectClassSelectors(obj)) {
+      const rule = getCSSRule(`.${cls}`);
+      if (rule) _apply_rule(rule, obj, `.${cls}`);
+    }
   }
-  for (let obj of muse.namedConvicts) {
+  for (const obj of muse.namedConvicts) {
     if (!obj.userData.domId) continue;
     const rule = getCSSRule(`#${obj.userData.domId}`);
-    if (rule) _apply_rule(rule, obj,`#${obj.userData.domId}`);
+    if (rule) _apply_rule(rule, obj, `#${obj.userData.domId}`);
   }
 }
 
-// Apply rules for a single object
-// #param muse - THREE object to paint
-export function paintSpecificMuse(muse){
+/**
+ * Paint a single object: base rules, pseudo-rules, inline style.
+ *
+ * @param {THREE.Object3D} muse
+ */
+export function paintSpecificMuse(muse) {
+  const extra = muse.userData.extraParams || [];
 
-    let rule = getCSSRule(`.${muse.name}`);
+  getObjectClassSelectors(muse).forEach(cls => {
+    const rule = getCSSRule(`.${cls}`);
     if (rule) _apply_rule(rule, muse);
-    rule = getCSSRule(`#${muse.userData.domId}`);
-    if (rule) _apply_rule(rule, muse);
-    muse.userData.extraParams.forEach(param => {
-      const rule = getCSSRule(`.${muse.name}${param}`);
-      if (rule) _apply_rule(rule, muse);
-    });
+  });
 
-    if (muse.userData.domId){
-    muse.userData.extraParams.forEach(param => {
-      const rule = getCSSRule(`#${muse.userData.domId}${param}`);
-      if (rule) _apply_rule(rule, muse);
+  if (muse.userData.domId) {
+    const baseIdRule = getCSSRule(`#${muse.userData.domId}`);
+    if (baseIdRule) _apply_rule(baseIdRule, muse);
+  }
+
+  extra.forEach(param => {
+    getObjectClassSelectors(muse).forEach(cls => {
+      const clsRule = getCSSRule(`.${cls}${param}`);
+      if (clsRule) _apply_rule(clsRule, muse);
     });
-  } 
-  if (muse.userData.domEl.hasAttribute("style")) {
-      _apply_rule(muse.userData.domEl,muse);
-    }
+  });
+
+  if (muse.userData.domId) {
+    extra.forEach(param => {
+      const idRule = getCSSRule(`#${muse.userData.domId}${param}`);
+      if (idRule) _apply_rule(idRule, muse);
+    });
+  }
+
+  if (muse.userData.domEl?.hasAttribute('style')) {
+    _apply_rule(muse.userData.domEl, muse);
+  }
 }
 
-
-// Apply constant :active rules to an object
-// #param muse - THREE object to paint
-export function paintConstantMuse(muse){
-      let rule = getCSSRule(`.${muse.name}:active`);
-      if (rule) _apply_rule(rule, muse);
-
-      rule = getCSSRule(`#${muse.userData.domId}:active`);
-      if (rule) _apply_rule(rule, muse);
+/**
+ * Apply constant :active rules each frame for flagged convicts.
+ *
+ * @param {THREE.Object3D} muse
+ */
+export function paintConstantMuse(muse) {
+  getObjectClassSelectors(muse).forEach(cls => {
+    const rule = getCSSRule(`.${cls}:active`);
+    if (rule) _apply_rule(rule, muse);
+  });
+  if (muse.userData.domId) {
+    const rule = getCSSRule(`#${muse.userData.domId}:active`);
+    if (rule) _apply_rule(rule, muse);
+  }
 }

@@ -1,51 +1,66 @@
-import * as THREE from '../../node_modules/three/build/three.module.js';
+// utils.js
+//
+// - Keyframe rule collection
+// - Class map for tag → THREE constructor
+// - Asset loading / caching
+// - Small array utilities
+
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { FBXLoader  } from 'three/examples/jsm/loaders/FBXLoader.js';
-
-
-/* ───────────────── KEYFRAME MAP ───────────────── */
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 
 export let AllKeyFramesMap = new Map();
 
-// Collect all @keyframes rules from loaded stylesheets
-// #param none
+/**
+ * Collect all @keyframes rules from loaded stylesheets.
+ *
+ * @returns {Map<string, CSSKeyframesRule>}
+ */
 export function gatherKeyFrame_MAP() {
-  const keyframesMap = new Map();
+  AllKeyFramesMap.clear();
 
-  // Walk through every stylesheet on the page
+  const KEYFRAMES_TYPES = new Set();
+  if (typeof CSSRule !== 'undefined') {
+    if ('KEYFRAMES_RULE' in CSSRule) KEYFRAMES_TYPES.add(CSSRule.KEYFRAMES_RULE);
+    if ('WEBKIT_KEYFRAMES_RULE' in CSSRule) KEYFRAMES_TYPES.add(CSSRule.WEBKIT_KEYFRAMES_RULE);
+  }
+
   for (const sheet of document.styleSheets) {
     let rules;
     try {
-      // May throw if stylesheet is cross-origin
       rules = sheet.cssRules;
-    } catch (e) {
-      // Skip CORS-protected sheets
+    } catch {
       continue;
     }
-
-    // Examine each rule
     for (const rule of rules) {
-      // Standard API: CSSRule.KEYFRAMES_RULE === 7
-      // WebKit prefix: CSSRule.WEBKIT_KEYFRAMES_RULE === 8
-      if (
-        rule.type === CSSRule.KEYFRAMES_RULE ||
-        rule.type === CSSRule.WEBKIT_KEYFRAMES_RULE
-      ) {
-        // rule.name is the identifier after @keyframes
-        keyframesMap.set(rule.name, rule);
+      if (KEYFRAMES_TYPES.has(rule.type)) {
+        AllKeyFramesMap.set(rule.name, rule);
       }
     }
   }
 
-  return keyframesMap;
+  return AllKeyFramesMap;
 }
 
+/**
+ * Get a CSSKeyframesRule by name, rescanning stylesheets each call.
+ *
+ * @param {string} AnimName
+ */
+export function getAnimationMap(AnimName) {
+  if (!AnimName) return undefined;
+  gatherKeyFrame_MAP();
+  return AllKeyFramesMap.get(AnimName);
+}
 
 /* ───────────────── CLASS MAP ───────────────── */
+
 let classMap = null;
 
-// Build a map of available THREE classes
-// #param none
+/**
+ * Build a map of tag-name-like keys → THREE.Object3D constructors.
+ */
 function buildClassMap() {
   classMap = Object.getOwnPropertyNames(THREE)
     .filter(key => {
@@ -57,76 +72,229 @@ function buildClassMap() {
       return m;
     }, Object.create(null));
 
-  AllKeyFramesMap = gatherKeyFrame_MAP();
-
-  classMap.OBJECT3D = THREE.Object3D;   // base type
+  // include base Object3D explicitly
+  classMap.OBJECT3D = THREE.Object3D;
 }
-// Get cached class map, building it on first call
-// #param none
+
+/**
+ * Get the cached class map, building it on first call.
+ *
+ * @returns {Object.<string,Function>}
+ */
 export function getClassMap() {
   if (!classMap) buildClassMap();
   return classMap;
 }
 
 /* ───────────────── ASSET MAP ───────────────── */
-let assetMap = new Map();
 
+const assetMap = new Map();
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+const textureLoader = new THREE.TextureLoader();
+const audioLoader = new THREE.AudioLoader();
+const mtlLoader = new MTLLoader();
 
+function storeAssetValue(key, value) {
+  if (value && typeof value.then === 'function') {
+    const pending = value
+      .then(resolved => {
+        assetMap.set(key, resolved);
+        return resolved;
+      })
+      .catch(err => {
+        console.error(`Failed to load asset "${key}":`, err);
+        assetMap.delete(key);
+        return null;
+      });
+    assetMap.set(key, pending);
+  } else {
+    assetMap.set(key, value);
+  }
+}
 
-// Retrieve or load an asset by name
-// #param name - asset key
-// #param path - optional path if asset needs loading
+/**
+ * Scan stylesheets for custom @rules that declare external assets.
+ *
+ * Syntax:
+ *   @MyShip {
+ *     url: "./ship.glb";
+ *     name: "Spaceship";   // optional, overrides @ identifier
+ *   }
+ */
+function gatherAssetRules() {
+  const ignoreAtRules = new Set([
+    'media', 'import', 'supports', 'keyframes', 'font-face', 'charset',
+    'namespace', 'page', 'counter-style', 'font-feature-values', 'viewport'
+  ]);
+
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+
+    for (const rule of rules) {
+      const text = rule.cssText?.trim();
+      if (!text) continue;
+
+      const match = text.match(/^@([A-Za-z0-9_-]+)\s*\{([^}]*)\}/);
+      if (!match) continue;
+
+      const atName = match[1];
+      if (ignoreAtRules.has(atName.toLowerCase())) continue;
+
+      const body = match[2];
+      const obj = {};
+      body.split(';').forEach(line => {
+        const parts = line
+          .split(':')
+          .map(s => s && s.trim())
+          .filter(Boolean);
+        if (parts.length >= 2) {
+          const key = parts[0].toLowerCase();
+          let value = parts[1];
+          value = value.replace(/^['"(]+|['")]+$/g, '');
+          obj[key] = value;
+        }
+      });
+
+      const url = obj.url;
+      if (!url) continue;
+
+      let name;
+      if (obj.name && obj.name.trim()) {
+        name = obj.name.trim();
+      } else {
+        name = atName || (() => {
+          const fname = url.split('/').pop() || '';
+          const dot = fname.lastIndexOf('.');
+          return dot >= 0 ? fname.slice(0, dot) : fname;
+        })();
+      }
+
+      if (!assetMap.has(name)) {
+        storeAssetValue(name, loadAsset(url));
+      }
+    }
+  }
+}
+
+/**
+ * Get or load an asset by name.
+ *
+ * Built-ins (auto-registered on first use):
+ *   - cube   → BoxGeometry
+ *   - sphere → SphereGeometry
+ *   - plane  → PlaneGeometry
+ *   - torus  → TorusGeometry
+ *
+ * @param {string} name
+ * @param {string|null} [path=null]
+ * @returns {any}
+ */
 export function getAsset(name, path = null) {
-  //console.log(assetMap);
-  if(assetMap.size == 0){
-    // preload a few geometries
-    assetMap.set('cube',    new THREE.BoxGeometry());
-    assetMap.set('sphere', new THREE.SphereGeometry());
-    assetMap.set('plane',  new THREE.PlaneGeometry());
-    assetMap.set('torus',  new THREE.TorusGeometry());
+  if (assetMap.size === 0) {
+    storeAssetValue('cube', new THREE.BoxGeometry());
+    storeAssetValue('sphere', new THREE.SphereGeometry());
+    storeAssetValue('plane', new THREE.PlaneGeometry());
+    storeAssetValue('torus', new THREE.TorusGeometry());
   }
 
+  // read CSS-defined assets
+  gatherAssetRules();
+
   const key = name;
-  //console.log("attempting to grab : " + key);
   if (!assetMap.has(key)) {
     if (!path) {
       console.warn(`Asset "${name}" missing and no path supplied.`);
       return null;
     }
-    assetMap.set(key, loadAsset(path));           // store the Promise
+    storeAssetValue(key, loadAsset(path));
   }
-  return assetMap.get(key);                       // value or Promise
+
+  return assetMap.get(key);
 }
 
-/* ───────────────── LOAD ASSET ───────────────── */
-const gltfLoader = new GLTFLoader();
-const fbxLoader  = new FBXLoader();
-
-// Load a 3D asset based on file extension
-// #param url - URL of the asset
+/**
+ * Load a 3D / texture / audio / material asset based on file extension.
+ *
+ * @param {string} url
+ * @returns {Promise<any>|null}
+ */
 export function loadAsset(url) {
-  const ext = url.split('.').pop().toLowerCase();
+  const ext = (url.split('.').pop() || '').toLowerCase();
   switch (ext) {
-    case 'gltf': case 'glb':
+    case 'gltf':
+    case 'glb':
       return new Promise((res, rej) =>
-        gltfLoader.load(url, d => res(d.scene || d), null, rej));
+        gltfLoader.load(url, d => res(d.scene || d), null, rej)
+      );
     case 'fbx':
       return new Promise((res, rej) =>
-        fbxLoader.load(url, res, null, rej));
+        fbxLoader.load(url, res, null, rej)
+      );
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+      return new Promise((res, rej) =>
+        textureLoader.load(url, tex => res(tex), undefined, rej)
+      );
+    case 'mp3':
+    case 'wav':
+    case 'ogg':
+    case 'flac':
+    case 'aac':
+      return new Promise((res, rej) =>
+        audioLoader.load(url, buffer => res(buffer), undefined, rej)
+      );
+    case 'mtl':
+      return new Promise((res, rej) =>
+        mtlLoader.load(
+          url,
+          mtl => {
+            mtl.preload();
+            res(mtl);
+          },
+          undefined,
+          rej
+        )
+      );
+    case 'json':
+      return fetch(url)
+        .then(response => response.json())
+        .then(json => {
+          try {
+            const loader = new THREE.MaterialLoader();
+            return loader.parse(json);
+          } catch (err) {
+            console.warn(`MaterialLoader failed to parse ${url}:`, err);
+            return json;
+          }
+        });
     default:
       console.warn(`No loader for ".${ext}".`);
       return Promise.resolve(null);
   }
 }
 
-// Remove an item from an array without preserving order
-// #param arry - array to modify
-// #param item - item to remove
-export function fastRemove_arry(arry,item){
+/**
+ * Remove an item from an array without preserving order.
+ *
+ * @param {Array<any>} arry
+ * @param {any} item
+ */
+export function fastRemove_arry(arry, item) {
   const index = arry.indexOf(item);
-  if(index !== -1){
-    arry[index] = arry[arry.length-1];
+  if (index !== -1) {
+    arry[index] = arry[arry.length - 1];
+    arry.pop();
   }
-  arry.pop();
 }
 
+// Alias for older code.
+export const fastRemoveArray = fastRemove_arry;

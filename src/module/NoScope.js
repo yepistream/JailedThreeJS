@@ -1,113 +1,208 @@
-import * as THREE from '../../node_modules/three/build/three.module.js';
-import { paintConvict, paintExtraCell, paintSpecificMuse } from './artist.js';
+// NoScope.js
+//
+// Centralised event handling.
+// Shared THREE.Raycaster + NDC pointer for all cells; all pickable
+// objects live on layer 3.
+
+import * as THREE from 'three';
+import { paintExtraCell, paintSpecificMuse } from './artist.js';
 import { fastRemove_arry } from './utils.js';
 
-/* ------------------------------------------------------------------ */
-/*  Single shared raycaster & pointer (perf)                          */
-/* ------------------------------------------------------------------ */
-const raycaster  = new THREE.Raycaster();
+const raycaster = new THREE.Raycaster();
 const ndcPointer = new THREE.Vector2();
 
+// Only objects on layer 3 are considered pickable.
 raycaster.layers.set(3);
 
-/* ------------------------------------------------------------------ */
-/*  Array-based flag helpers                                          */
-/* ------------------------------------------------------------------ */
-// Add a flag to an array if it is not already present
-// #param arr - array to modify
-// #param flag - flag to add
+/* Flag helpers */
+
 function addFlag(arr, flag) {
-    if (!arr.includes(flag)) arr.push(flag);      // no dupes
+  if (!arr.includes(flag)) arr.push(flag);
 }
-// Remove a flag from an array
-// #param arr - array to modify
-// #param flag - flag to remove
+
 function delFlag(arr, flag) {
-    fastRemove_arry(arr, flag);                   // your util
+  fastRemove_arry(arr, flag);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Public handlers                                                   */
-/* ------------------------------------------------------------------ */
-// Handle click events inside a cell
-// #param domEvt - browser mouse event
-// #param cell - Cell instance that received the click
+/* Public handlers */
+
 export function default_onCellClick_method(domEvt, cell) {
-    const hit = cell._last_cast_caught;
-    if (!hit) return;
+  const hit = cell._last_cast_caught;
+  if (!hit) return;
 
-    addFlag(hit.userData.extraParams, ':focus');
+  addFlag(hit.userData.extraParams, ':focus');
 
-    const synth = {
-        type:            'cellclick',
-        originalEvt:     domEvt,
-        target3d:        hit,
-        targetCell:      cell,
-        targetElement:   hit.userData.domEl,
-        pointerPosition: cell._lastHitPosition
-    };
+  const synth = {
+    type: 'cellclick',
+    originalEvt: domEvt,
+    target3d: hit,
+    targetCell: cell,
+    targetElement: hit.userData.domEl,
+    pointerPosition: cell._lastHitPosition
+  };
 
-    hit.userData.domEl.onclick?.call(hit.userData.domEl, synth);
-    paintExtraCell(cell);
+  hit.userData.domEl.onclick?.call(hit.userData.domEl, synth);
+  paintExtraCell(cell);
 }
 
-// Handle pointer movement inside a cell
-// #param domEvt - browser pointer event
-// #param cell - Cell instance to test against
 export function default_onCellPointerMove_method(domEvt, cell) {
-    _raycast(domEvt, cell.focusedCamera);
+  if (!cell.focusedCamera) return;
 
-    const hit     = raycaster.intersectObjects(cell.loadedScene.children, true)[0];
-    const lastHit = cell._last_cast_caught;
-    
+  _raycast(domEvt, cell.focusedCamera, cell.cellElm);
 
-    if (hit) {
-        if (hit.object !== lastHit) {
-            // transitioned to a new object
-            if (lastHit) {
-                delFlag(lastHit.userData.extraParams, ':hover');
-                paintSpecificMuse(lastHit);
-            }
-            cell._last_cast_caught = hit.object;
-        }
+  const hitResult = raycaster.intersectObjects(cell.loadedScene.children, true)[0];
+  const lastHit = cell._last_cast_caught;
 
-        addFlag(hit.object.userData.extraParams, ':hover');
-        cell._lastHitPosition = hit.point;
+  if (hitResult) {
+    const hitObject = hitResult.object;
 
-        hit.object.userData.domEl.onmouseover?.call(
-            hit.object.userData.domEl,
-            {
-                type:            'cellhover',
-                originalEvt:     domEvt,
-                target3d:        hit.object,
-                targetCell:      cell,
-                targetElement:   hit.object.userData.domEl,
-                pointerPosition: hit.point
-            }
-        );
-
-        paintExtraCell(cell);
-    } else if (lastHit) {
-        // ray left all objects
+    if (hitObject !== lastHit) {
+      if (lastHit) {
         delFlag(lastHit.userData.extraParams, ':hover');
+        lastHit.userData.domEl.onmouseleave?.call(lastHit.userData.domEl, {
+          type: 'cellmouseleave',
+          originalEvt: domEvt,
+          target3d: lastHit,
+          targetCell: cell,
+          targetElement: lastHit.userData.domEl,
+          pointerPosition: cell._lastHitPosition
+        });
         paintSpecificMuse(lastHit);
-        cell._last_cast_caught = null;
+      }
+
+      cell._last_cast_caught = hitObject;
+
+      hitObject.userData.domEl.onmouseenter?.call(hitObject.userData.domEl, {
+        type: 'cellmouseenter',
+        originalEvt: domEvt,
+        target3d: hitObject,
+        targetCell: cell,
+        targetElement: hitObject.userData.domEl,
+        pointerPosition: hitResult.point
+      });
     }
+
+    addFlag(hitObject.userData.extraParams, ':hover');
+    cell._lastHitPosition = hitResult.point;
+
+    hitObject.userData.domEl.onmouseover?.call(hitObject.userData.domEl, {
+      type: 'cellhover',
+      originalEvt: domEvt,
+      target3d: hitObject,
+      targetCell: cell,
+      targetElement: hitObject.userData.domEl,
+      pointerPosition: hitResult.point
+    });
+
+    paintExtraCell(cell);
+  } else if (lastHit) {
+    delFlag(lastHit.userData.extraParams, ':hover');
+    lastHit.userData.domEl.onmouseleave?.call(lastHit.userData.domEl, {
+      type: 'cellmouseleave',
+      originalEvt: domEvt,
+      target3d: lastHit,
+      targetCell: cell,
+      targetElement: lastHit.userData.domEl,
+      pointerPosition: cell._lastHitPosition
+    });
+    paintSpecificMuse(lastHit);
+    cell._last_cast_caught = null;
+  }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Internal: raycast helper                                          */
-/* ------------------------------------------------------------------ */
-// Internal helper to perform a raycast using event coordinates
-// #param domEvt - browser pointer event
-// #param camera - camera used for the raycast
-function _raycast(domEvt, camera) {
-    const rect = domEvt.target.getBoundingClientRect();
+export function default_onCellMouseDown_method(domEvt, cell) {
+  const hit = cell._last_cast_caught;
+  if (!hit) return;
 
-    ndcPointer.set(
-        ((domEvt.clientX - rect.left) / rect.width) * 2 - 1,
-        (-(domEvt.clientY - rect.top) / rect.height) * 2 + 1
-    );
+  addFlag(hit.userData.extraParams, ':active');
 
-    raycaster.setFromCamera(ndcPointer, camera);
+  const synth = {
+    type: 'celldown',
+    originalEvt: domEvt,
+    target3d: hit,
+    targetCell: cell,
+    targetElement: hit.userData.domEl,
+    pointerPosition: cell._lastHitPosition
+  };
+
+  hit.userData.domEl.onmousedown?.call(hit.userData.domEl, synth);
+  paintExtraCell(cell);
+}
+
+export function default_onCellMouseUp_method(domEvt, cell) {
+  const hit = cell._last_cast_caught;
+  if (!hit) return;
+
+  delFlag(hit.userData.extraParams, ':active');
+
+  const synth = {
+    type: 'cellup',
+    originalEvt: domEvt,
+    target3d: hit,
+    targetCell: cell,
+    targetElement: hit.userData.domEl,
+    pointerPosition: cell._lastHitPosition
+  };
+
+  hit.userData.domEl.onmouseup?.call(hit.userData.domEl, synth);
+  paintExtraCell(cell);
+}
+
+export function default_onCellDoubleClick_method(domEvt, cell) {
+  const hit = cell._last_cast_caught;
+  if (!hit) return;
+
+  addFlag(hit.userData.extraParams, ':focus');
+
+  const synth = {
+    type: 'celldblclick',
+    originalEvt: domEvt,
+    target3d: hit,
+    targetCell: cell,
+    targetElement: hit.userData.domEl,
+    pointerPosition: cell._lastHitPosition
+  };
+
+  hit.userData.domEl.ondblclick?.call(hit.userData.domEl, synth);
+  paintExtraCell(cell);
+}
+
+export function default_onCellContextMenu_method(domEvt, cell) {
+  const hit = cell._last_cast_caught;
+  if (!hit) return;
+
+  const synth = {
+    type: 'cellcontextmenu',
+    originalEvt: domEvt,
+    target3d: hit,
+    targetCell: cell,
+    targetElement: hit.userData.domEl,
+    pointerPosition: cell._lastHitPosition
+  };
+
+  hit.userData.domEl.oncontextmenu?.call(hit.userData.domEl, synth);
+  paintExtraCell(cell);
+}
+
+/* Internal raycast helper */
+
+/**
+ * @param {MouseEvent} domEvt
+ * @param {THREE.Camera} camera
+ * @param {HTMLElement} referenceEl
+ */
+function _raycast(domEvt, camera, referenceEl) {
+  if (!camera) return;
+
+  const targetEl = referenceEl || domEvt.currentTarget || domEvt.target;
+  const rect = targetEl.getBoundingClientRect();
+
+  camera.updateMatrixWorld();
+
+  ndcPointer.set(
+    ((domEvt.clientX - rect.left) / rect.width) * 2 - 1,
+    (-(domEvt.clientY - rect.top) / rect.height) * 2 + 1
+  );
+
+  raycaster.setFromCamera(ndcPointer, camera);
 }

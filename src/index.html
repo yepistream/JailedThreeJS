@@ -1,43 +1,1753 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <title>JailedThreeJS Scene Creator</title>
 
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-0: #111111;
+      --bg-1: #181818;
+      --bg-2: #222222;
+      --bg-3: #2b2b2b;
+      --bg-4: #363636;
+      --accent: #4aa3ff;
+      --accent-soft: rgba(74, 163, 255, 0.15);
+      --text: #f2f2f2;
+      --muted: #a0a0a0;
+      --border: #303030;
+      --danger: #ff5555;
+    }
 
+    * {
+      box-sizing: border-box;
+    }
 
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-0);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      font-size: 12px;
+    }
+
+    .topbar {
+      height: 32px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 10px;
+      user-select: none;
+    }
+
+    .topbar-title {
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .topbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      margin-left: 8px;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--bg-1);
+      color: var(--text);
+      padding: 3px 8px;
+      border-radius: 2px;
+      font-size: 11px;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-small {
+      padding: 2px 6px;
+      font-size: 10px;
+    }
+
+    .btn:hover {
+      background: var(--bg-3);
+      border-color: var(--accent);
+    }
+
+    .btn:active {
+      background: var(--bg-4);
+    }
+
+    .btn-ghost {
+      background: transparent;
+    }
+
+    .btn-toggle {
+      opacity: 0.7;
+    }
+    .btn-toggle.active {
+      opacity: 1;
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) 340px;
+      grid-template-rows: minmax(0, 1fr) 130px;
+      grid-template-areas:
+        "viewport sidebar"
+        "timeline sidebar";
+      background: var(--bg-1);
+    }
+
+    .viewport-area {
+      grid-area: viewport;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .viewport-header {
+      height: 22px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .viewport-header-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .viewport-header-tag {
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .viewport-header-mode {
+      font-size: 10px;
+      color: var(--muted);
+      padding: 1px 5px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+
+    .viewport-header-mode.fps {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .viewport {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at top, #333 0, #111 55%, #000 100%);
+    }
+
+    cell {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    cell > :not(canvas) {
+      display: none;
+    }
+
+    .sidebar {
+      grid-area: sidebar;
+      border-left: 1px solid var(--border);
+      background: var(--bg-1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel:last-child {
+      border-bottom: 0;
+    }
+
+    .panel-header {
+      height: 22px;
+      background: var(--bg-2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      font-size: 11px;
+      user-select: none;
+    }
+
+    .panel-header span:first-child {
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .panel-header span:last-child {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .panel-body {
+      padding: 6px 8px 8px;
+    }
+
+    .object-list {
+      max-height: 120px;
+      overflow-y: auto;
+      padding: 2px 0;
+    }
+
+    .object-item {
+      padding: 3px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .object-item span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .object-item.active {
+      background: var(--bg-3);
+      color: var(--text);
+      border-left: 2px solid var(--accent);
+      padding-left: 4px;
+    }
+
+    .object-item:hover:not(.active) {
+      background: var(--bg-2);
+      color: var(--text);
+    }
+
+    .transform-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+
+    .transform-toolbar label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 2px;
+    }
+
+    .transform-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .transform-row {
+      background: var(--bg-2);
+      border-radius: 3px;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+    }
+
+    .transform-row-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .transform-row-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .transform-row-axes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .axis-field {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .axis-tag {
+      width: 14px;
+      height: 14px;
+      font-size: 9px;
+      color: var(--muted);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    .axis-field input {
+      flex: 1;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 2px;
+      padding: 2px 3px;
+      font-size: 11px;
+    }
+
+    .axis-field input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .color-row {
+      background: var(--bg-2);
+      border-radius: 3px;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .color-row-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .color-row input[type="color"] {
+      padding: 0;
+      height: 20px;
+      width: 36px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      cursor: pointer;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 6px;
+    }
+
+    .hint code {
+      font-size: 10px;
+      background: var(--bg-2);
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+
+    .scene-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .code-editors {
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .code-editor-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .code-editor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .code-editor-header button {
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--muted);
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .code-editor-header button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    textarea.code-editor {
+      resize: vertical;
+      min-height: 48px;
+      max-height: 110px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 4px 6px;
+      color: var(--text);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+        Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    textarea.code-editor:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .timeline {
+      grid-area: timeline;
+      border-top: 1px solid var(--border);
+      background: var(--bg-1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .timeline-header {
+      height: 22px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .timeline-header-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .timeline-header-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .timeline-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: var(--muted);
+      font-size: 11px;
+      user-select: none;
+    }
+
+    .timeline-scrub {
+      flex: 1;
+      height: 5px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        #333 0,
+        #333 10%,
+        #222 10%,
+        #222 20%,
+        #333 20%,
+        #333 30%,
+        #222 30%,
+        #222 40%,
+        #333 40%,
+        #333 50%,
+        #222 50%,
+        #222 60%,
+        #333 60%,
+        #333 70%,
+        #222 70%,
+        #222 80%,
+        #333 80%,
+        #333 90%,
+        #222 90%,
+        #222 100%
+      );
+      margin-right: 12px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .timeline-scrub-knob {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    .timeline-play {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .timeline-play button {
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--border);
+      background: var(--bg-1);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 10px;
+    }
+
+    .timeline-play button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .timeline-time {
+      min-width: 70px;
+      text-align: right;
+      font-size: 10px;
+    }
+
+    .scene-object.selected {
+      outline: 1px solid transparent;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+      "three/examples/jsm/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
+  <div class="topbar">
+    <div class="topbar-title">JailedThree Scene</div>
 
-    <cell width="500px" height="500px">
-        <DirectionalLight class="global_light"></DirectionalLight>
-        <OrthoraphicCamera render id="Main_Camera"> </OrthoraphicCamera>
-        <mesh id="building_floor" onmouseover="moveNavCube(event,-2)" onclick="placeBlock(event)" ></mesh>
-        <mesh id="ghost_nav_place_block"  ></mesh>
-    </cell>
+    <div class="topbar-group">
+      <button class="btn btn-small" id="btn-add-cube">Add Cube</button>
+      <button class="btn btn-small" id="btn-add-light">Add Light</button>
+    </div>
 
-    <script>
-        const navmeshelm = document.getElementById("ghost_nav_place_block");
-        function moveNavCube(event, offsetY=0) {
-            navmeshelm.style.setProperty("--position",`(${event.pointerPosition.x.toFixed(0)},${event.pointerPosition.y.toFixed(0)-offsetY},${event.pointerPosition.z.toFixed(0)})`);
+    <div class="topbar-group">
+      <button class="btn btn-small btn-ghost" id="btn-frame-all">Frame All</button>
+      <button class="btn btn-small btn-ghost" id="btn-reset-view">Reset View</button>
+    </div>
+
+    <div style="margin-left:auto; font-size:11px; color:var(--muted);">
+      LMB: select · Shift+LMB: toggle FPS · Scroll: zoom
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="viewport-area">
+      <div class="viewport-header">
+        <div class="viewport-header-left">
+          <span class="viewport-header-tag">3D View</span>
+          <span style="font-size:10px; color:var(--muted);">Perspective</span>
+        </div>
+        <div id="viewport-mode-indicator" class="viewport-header-mode">
+          Orbit
+        </div>
+      </div>
+      <div class="viewport">
+        <cell id="scene-cell">
+          <perspectivecamera id="cam" render></perspectivecamera>
+          <ambientlight id="ambient"></ambientlight>
+          <directionallight id="sun"></directionallight>
+        </cell>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <section class="panel">
+        <div class="panel-header">
+          <span>Outliner</span>
+          <span>Objects</span>
+        </div>
+        <div class="panel-body">
+          <div class="object-list" id="object-list"></div>
+          <div class="hint">
+            Click in the viewport or list to select an object.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Transform</span>
+          <span id="active-label">None</span>
+        </div>
+        <div class="panel-body">
+          <div class="transform-toolbar">
+            <label>Gizmos</label>
+            <button class="btn btn-small btn-toggle active" id="mode-translate" title="Move (G)">Move</button>
+            <button class="btn btn-small btn-toggle" id="mode-rotate" title="Rotate (R)">Rotate</button>
+            <button class="btn btn-small btn-toggle" id="mode-scale" title="Scale (S)">Scale</button>
+          </div>
+
+          <div class="transform-group">
+            <div class="transform-row">
+              <div class="transform-row-header">
+                <div class="transform-row-label">Location</div>
+              </div>
+              <div class="transform-row-axes">
+                <div class="axis-field">
+                  <div class="axis-tag">X</div>
+                  <input type="number" step="0.1" id="pos-x" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Y</div>
+                  <input type="number" step="0.1" id="pos-y" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Z</div>
+                  <input type="number" step="0.1" id="pos-z" />
+                </div>
+              </div>
+            </div>
+
+            <div class="transform-row">
+              <div class="transform-row-header">
+                <div class="transform-row-label">Rotation (°)</div>
+              </div>
+              <div class="transform-row-axes">
+                <div class="axis-field">
+                  <div class="axis-tag">X</div>
+                  <input type="number" step="1" id="rot-x" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Y</div>
+                  <input type="number" step="1" id="rot-y" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Z</div>
+                  <input type="number" step="1" id="rot-z" />
+                </div>
+              </div>
+            </div>
+
+            <div class="transform-row">
+              <div class="transform-row-header">
+                <div class="transform-row-label">Scale</div>
+              </div>
+              <div class="transform-row-axes">
+                <div class="axis-field">
+                  <div class="axis-tag">X</div>
+                  <input type="number" step="0.1" id="scl-x" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Y</div>
+                  <input type="number" step="0.1" id="scl-y" />
+                </div>
+                <div class="axis-field">
+                  <div class="axis-tag">Z</div>
+                  <input type="number" step="0.1" id="scl-z" />
+                </div>
+              </div>
+            </div>
+
+            <div class="color-row">
+              <div class="color-row-label">Color</div>
+              <input type="color" id="color-input" />
+            </div>
+          </div>
+
+          <div class="hint">
+            Rotation uses degrees like Blender.  
+            Inputs update live while you type.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" style="flex:1;">
+        <div class="panel-header">
+          <span>Scene</span>
+          <span>Code Fiddles</span>
+        </div>
+        <div class="panel-body">
+          <div class="scene-meta" id="scene-info">Objects: 0</div>
+
+          <div class="code-editors">
+            <div class="code-editor-block">
+              <div class="code-editor-header">
+                <span>Cell HTML</span>
+                <button type="button" id="copy-html">Copy</button>
+              </div>
+              <textarea class="code-editor" id="html-editor"></textarea>
+            </div>
+
+            <div class="code-editor-block">
+              <div class="code-editor-header">
+                <span>CSS</span>
+                <button type="button" id="copy-css">Copy</button>
+              </div>
+              <textarea class="code-editor" id="css-editor"></textarea>
+            </div>
+
+            <div class="code-editor-block">
+              <div class="code-editor-header">
+                <span>JS</span>
+                <button type="button" id="copy-js">Copy</button>
+              </div>
+              <textarea class="code-editor" id="js-editor"></textarea>
+            </div>
+          </div>
+
+          <div class="hint">
+            Editing these snippets mutates the selected object live.  
+            JS gets <code>(obj, cell, THREE)</code> as parameters.
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="timeline">
+      <div class="timeline-header">
+        <div class="timeline-header-left">
+          <span>Timeline</span>
+          <span id="timeline-object-label" style="font-size:10px;">No object</span>
+        </div>
+        <div class="timeline-header-right">
+          <button class="btn btn-small" id="add-keyframe">+ Key</button>
+        </div>
+      </div>
+      <div class="timeline-body">
+        <div class="timeline-scrub" id="timeline-scrub">
+          <div class="timeline-scrub-knob" id="timeline-knob"></div>
+        </div>
+        <div class="timeline-play">
+          <button id="timeline-play-btn" title="Play/Pause">▶</button>
+          <span class="timeline-time" id="timeline-time-label">F: 1 / 120</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    import './module/main.js';
+    import Cell from './module/cell.js';
+    import * as THREE from 'three';
+
+    const cellEl = document.getElementById('scene-cell');
+    let cell = null;
+    let objectCounter = 0;
+    let activeObjectId = null;
+
+    const objectListEl = document.getElementById('object-list');
+    const sceneInfoEl = document.getElementById('scene-info');
+    const activeLabelEl = document.getElementById('active-label');
+
+    const posX = document.getElementById('pos-x');
+    const posY = document.getElementById('pos-y');
+    const posZ = document.getElementById('pos-z');
+    const rotX = document.getElementById('rot-x');
+    const rotY = document.getElementById('rot-y');
+    const rotZ = document.getElementById('rot-z');
+    const sclX = document.getElementById('scl-x');
+    const sclY = document.getElementById('scl-y');
+    const sclZ = document.getElementById('scl-z');
+    const colorInput = document.getElementById('color-input');
+
+    const btnAddCube = document.getElementById('btn-add-cube');
+    const btnAddLight = document.getElementById('btn-add-light');
+    const btnFrameAll = document.getElementById('btn-frame-all');
+    const btnResetView = document.getElementById('btn-reset-view');
+
+    const viewportModeIndicator = document.getElementById('viewport-mode-indicator');
+
+    // Gizmo mode buttons (just modes, not 3D handles yet)
+    const modeTranslateBtn = document.getElementById('mode-translate');
+    const modeRotateBtn = document.getElementById('mode-rotate');
+    const modeScaleBtn = document.getElementById('mode-scale');
+    let gizmoMode = 'translate';
+
+    // Code editors
+    const htmlEditor = document.getElementById('html-editor');
+    const cssEditor = document.getElementById('css-editor');
+    const jsEditor = document.getElementById('js-editor');
+    const copyHtmlBtn = document.getElementById('copy-html');
+    const copyCssBtn = document.getElementById('copy-css');
+    const copyJsBtn = document.getElementById('copy-js');
+
+    // per-object snippet state
+    const htmlSnippets = new Map();
+    const cssSnippets = new Map();
+    const jsSnippets = new Map();
+
+    // Timeline
+    const addKeyframeBtn = document.getElementById('add-keyframe');
+    const timelineScrubEl = document.getElementById('timeline-scrub');
+    const timelineKnobEl = document.getElementById('timeline-knob');
+    const timelinePlayBtn = document.getElementById('timeline-play-btn');
+    const timelineTimeLabel = document.getElementById('timeline-time-label');
+    const timelineObjectLabel = document.getElementById('timeline-object-label');
+
+    const TOTAL_FRAMES = 120;
+    let currentTime01 = 0;
+    let isScrubbing = false;
+    let playing = false;
+    let lastTimelineTime = performance.now();
+    const keyframesById = new Map();
+
+    // FPS camera mode
+    let fpsMode = false;
+    let fpsYaw = 0;
+    let fpsPitch = 0;
+    let lastFpsTime = performance.now();
+    const moveState = { forward: 0, back: 0, left: 0, right: 0, up: 0, down: 0 };
+    let fpsUpdateFn = null;
+    let timelineUpdateFn = null;
+
+    function radToDeg(r) { return r * 180 / Math.PI; }
+    function degToRad(d) { return d * Math.PI / 180; }
+
+    function hexToRGB01(hex) {
+      const h = (hex || '#ffffff').replace('#', '');
+      if (h.length !== 6) return [1, 1, 1];
+      const r = parseInt(h.slice(0, 2), 16) / 255;
+      const g = parseInt(h.slice(2, 4), 16) / 255;
+      const b = parseInt(h.slice(4, 6), 16) / 255;
+      return [r, g, b];
+    }
+
+    function rgb01ToHex(r, g, b) {
+      const toHex = (v) => {
+        const n = Math.round(THREE.MathUtils.clamp(v, 0, 1) * 255);
+        return n.toString(16).padStart(2, '0');
+      };
+      return '#' + toHex(r) + toHex(g) + toHex(b);
+    }
+
+    function getConvict(id) {
+      if (!cell) return null;
+      return cell.getConvictById(id);
+    }
+
+    function genId(prefix) {
+      objectCounter += 1;
+      return `${prefix}.${objectCounter.toString().padStart(3, '0')}`;
+    }
+
+    function updateSceneInfo() {
+      const objs = cellEl.querySelectorAll('.scene-object');
+      sceneInfoEl.textContent = `Objects: ${objs.length}`;
+    }
+
+    function updateObjectList() {
+      objectListEl.innerHTML = '';
+      const objs = cellEl.querySelectorAll('.scene-object');
+      objs.forEach((el) => {
+        const id = el.id;
+        const label = el.dataset.label || id;
+
+        const item = document.createElement('div');
+        item.className = 'object-item' + (id === activeObjectId ? ' active' : '');
+        item.dataset.targetId = id;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = label;
+
+        const typeSpan = document.createElement('span');
+        typeSpan.style.fontSize = '10px';
+        typeSpan.style.color = 'var(--muted)';
+        typeSpan.textContent = el.tagName.toLowerCase();
+
+        item.appendChild(nameSpan);
+        item.appendChild(typeSpan);
+
+        item.addEventListener('click', () => {
+          setActiveObject(id);
+        });
+
+        objectListEl.appendChild(item);
+      });
+
+      updateSceneInfo();
+    }
+
+    function setActiveObject(id) {
+      activeObjectId = id;
+
+      const objs = cellEl.querySelectorAll('.scene-object');
+      objs.forEach((el) => {
+        const convict = getConvict(el.id);
+        if (!convict) return;
+        if (el.id === id) convict.userData.domEl.classList.add('selected');
+        else convict.userData.domEl.classList.remove('selected');
+      });
+
+      Array.from(objectListEl.children).forEach((el) => {
+        el.classList.toggle('active', el.dataset.targetId === id);
+      });
+
+      const activeMeshEl = id ? document.getElementById(id) : null;
+      const label = activeMeshEl
+        ? (activeMeshEl.dataset.label || activeMeshEl.id)
+        : 'None';
+
+      activeLabelEl.textContent = label;
+      timelineObjectLabel.textContent = activeMeshEl ? label : 'No object';
+
+      updateInspectorFromActive();
+      loadSnippetsForActive();
+      applySnippetsToActive(); // keep in sync
+    }
+
+    function updateInspectorFromActive() {
+      const obj = activeObjectId ? getConvict(activeObjectId) : null;
+      if (!obj) {
+        [posX, posY, posZ, rotX, rotY, rotZ, sclX, sclY, sclZ].forEach((el) => { el.value = ''; });
+        colorInput.value = '#ffffff';
+        return;
+      }
+
+      const p = obj.position;
+      const r = obj.rotation;
+      const s = obj.scale;
+
+      posX.value = p.x.toFixed(2);
+      posY.value = p.y.toFixed(2);
+      posZ.value = p.z.toFixed(2);
+
+      rotX.value = radToDeg(r.x).toFixed(1);
+      rotY.value = radToDeg(r.y).toFixed(1);
+      rotZ.value = radToDeg(r.z).toFixed(1);
+
+      sclX.value = s.x.toFixed(2);
+      sclY.value = s.y.toFixed(2);
+      sclZ.value = s.z.toFixed(2);
+
+      if (obj.material && obj.material.color) {
+        const c = obj.material.color;
+        colorInput.value = rgb01ToHex(c.r, c.g, c.b);
+      } else {
+        colorInput.value = '#ffffff';
+      }
+    }
+
+    function applyTransformFromInputs() {
+      const obj = activeObjectId ? getConvict(activeObjectId) : null;
+      if (!obj) return;
+
+      const px = parseFloat(posX.value);
+      const py = parseFloat(posY.value);
+      const pz = parseFloat(posZ.value);
+      const rxDeg = parseFloat(rotX.value);
+      const ryDeg = parseFloat(rotY.value);
+      const rzDeg = parseFloat(rotZ.value);
+      const sx = parseFloat(sclX.value);
+      const sy = parseFloat(sclY.value);
+      const sz = parseFloat(sclZ.value);
+
+      const pxv = Number.isFinite(px) ? px : 0;
+      const pyv = Number.isFinite(py) ? py : 0;
+      const pzv = Number.isFinite(pz) ? pz : 0;
+      const rx = Number.isFinite(rxDeg) ? degToRad(rxDeg) : 0;
+      const ry = Number.isFinite(ryDeg) ? degToRad(ryDeg) : 0;
+      const rz = Number.isFinite(rzDeg) ? degToRad(rzDeg) : 0;
+      const sxv = Number.isFinite(sx) ? sx : 1;
+      const syv = Number.isFinite(sy) ? sy : 1;
+      const szv = Number.isFinite(sz) ? sz : 1;
+
+      obj.position.set(pxv, pyv, pzv);
+      obj.rotation.set(rx, ry, rz);
+      obj.scale.set(sxv, syv, szv);
+
+      updateCssFromObjectToSnippet();
+      runJsSnippetForActive();
+    }
+
+    function applyColorFromInput() {
+      const obj = activeObjectId ? getConvict(activeObjectId) : null;
+      if (!obj || !obj.material || !obj.material.color) return;
+      const [r, g, b] = hexToRGB01(colorInput.value || '#ffffff');
+      obj.material.color.setRGB(r, g, b);
+      updateCssFromObjectToSnippet();
+      runJsSnippetForActive();
+    }
+
+    function addCube() {
+      const id = genId('Cube');
+      const mesh = document.createElement('mesh');
+      mesh.id = id;
+      mesh.className = 'scene-object';
+      mesh.dataset.label = id;
+
+      mesh.style.setProperty('--geometry', '@cube');
+      mesh.style.setProperty('--position', '(0, 0, 0)');
+      mesh.style.setProperty('--scale', '(1, 1, 1)');
+      mesh.style.setProperty('--material-color', '(0.8, 0.8, 0.8)');
+      mesh.style.setProperty('--transition', '200ms ease-out');
+
+      mesh.onclick = () => setActiveObject(id);
+
+      cellEl.appendChild(mesh);
+
+      setTimeout(() => {
+        updateObjectList();
+        setActiveObject(id);
+      }, 0);
+    }
+
+    function addLight() {
+      const id = genId('Light');
+      const light = document.createElement('directionallight');
+      light.id = id;
+      light.className = 'scene-object';
+      light.dataset.label = id;
+      light.style.setProperty('--intensity', '1.0');
+      light.style.setProperty('--color', '(1, 1, 0.9)');
+      light.style.setProperty('--position', '(3, 5, 2)');
+      light.onclick = () => setActiveObject(id);
+
+      cellEl.appendChild(light);
+
+      setTimeout(() => {
+        updateObjectList();
+        setActiveObject(id);
+      }, 0);
+    }
+
+    function frameAll() {
+      const cam = cell ? cell.getConvictById('cam') : null;
+      if (!cam) return;
+      cam.position.set(0, 3, 8);
+      cam.lookAt(0, 0, 0);
+    }
+
+    function resetView() {
+      const cam = cell ? cell.getConvictById('cam') : null;
+      if (!cam) return;
+      cam.position.set(0, 3, 10);
+      cam.lookAt(0, 0, 0);
+    }
+
+    function setupCameraAndLights() {
+      const cam = cell.getConvictById('cam');
+      const ambient = cell.getConvictById('ambient');
+      const sun = cell.getConvictById('sun');
+
+      if (cam) {
+        cam.position.set(0, 3, 10);
+        cam.lookAt(0, 0, 0);
+      }
+
+      if (ambient) {
+        ambient.intensity = 0.3;
+        ambient.color.setRGB(1, 1, 1);
+      }
+
+      if (sun) {
+        sun.position.set(4, 6, 3);
+        sun.intensity = 1.2;
+        sun.color.setRGB(1, 0.97, 0.9);
+      }
+    }
+
+    function setupScrollZoom() {
+      const viewport = cellEl.parentElement;
+      viewport.addEventListener('wheel', (evt) => {
+        const cam = cell ? cell.getConvictById('cam') : null;
+        if (!cam) return;
+        evt.preventDefault();
+
+        const delta = evt.deltaY * 0.01;
+        cam.position.z += delta;
+        cam.position.z = THREE.MathUtils.clamp(cam.position.z, 2, 50);
+      }, { passive: false });
+    }
+
+    // ------- Gizmo mode (UI only for now) ----------------------------------
+    function setGizmoMode(mode) {
+      gizmoMode = mode;
+      [modeTranslateBtn, modeRotateBtn, modeScaleBtn].forEach(b => b.classList.remove('active'));
+      if (mode === 'translate') modeTranslateBtn.classList.add('active');
+      if (mode === 'rotate') modeRotateBtn.classList.add('active');
+      if (mode === 'scale') modeScaleBtn.classList.add('active');
+    }
+
+    modeTranslateBtn.addEventListener('click', () => setGizmoMode('translate'));
+    modeRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
+    modeScaleBtn.addEventListener('click', () => setGizmoMode('scale'));
+
+    // ------- Snippets / code fiddles ---------------------------------------
+
+    function formatNumber(n, decimals = 2) {
+      return Number(n).toFixed(decimals);
+    }
+
+    function buildHtmlSnippet(domEl) {
+      if (!domEl) return '';
+      const tag = domEl.tagName.toLowerCase();
+      const id = domEl.id ? ` id="${domEl.id}"` : '';
+      const cls = domEl.className ? ` class="${domEl.className}"` : '';
+      const label = domEl.dataset.label ? ` data-label="${domEl.dataset.label}"` : '';
+      return `<${tag}${id}${cls}${label}></${tag}>`;
+    }
+
+    function buildCssSnippet(obj, domEl) {
+      if (!obj || !domEl) return '';
+
+      const id = domEl.id || '';
+      const selector = id
+        ? `#${id}`
+        : domEl.className
+          ? '.' + domEl.className.split(/\s+/)[0]
+          : domEl.tagName.toLowerCase();
+
+      const p = obj.position;
+      const r = obj.rotation;
+      const s = obj.scale;
+
+      const parts = [];
+      parts.push(`${selector} {`);
+      parts.push(`  --geometry: @cube;`);
+      parts.push(`  --position: (${formatNumber(p.x)}, ${formatNumber(p.y)}, ${formatNumber(p.z)});`);
+      parts.push(`  --rotation-x: ${formatNumber(r.x, 3)};`);
+      parts.push(`  --rotation-y: ${formatNumber(r.y, 3)};`);
+      parts.push(`  --rotation-z: ${formatNumber(r.z, 3)};`);
+      parts.push(`  --scale: (${formatNumber(s.x)}, ${formatNumber(s.y)}, ${formatNumber(s.z)});`);
+
+      if (obj.material && obj.material.color) {
+        const c = obj.material.color;
+        parts.push(`  --material-color: (${formatNumber(c.r, 3)}, ${formatNumber(c.g, 3)}, ${formatNumber(c.b, 3)});`);
+      }
+
+      parts.push(`  --transition: 200ms ease-out;`);
+      parts.push(`}`);
+
+      return parts.join('\n');
+    }
+
+    function buildJsSnippet(obj, domEl) {
+      if (!obj || !domEl) return '';
+
+      const cellId = cellEl.id || 'scene-cell';
+      const id = domEl.id;
+
+      const p = obj.position;
+      const r = obj.rotation;
+      const s = obj.scale;
+
+      const lines = [];
+      lines.push(`// This function runs with (obj, cell, THREE)`);
+      lines.push(`// and should mutate the object directly.`);
+      lines.push(``);
+      lines.push(`// Example: sync transform`);
+      lines.push(`obj.position.set(${formatNumber(p.x)}, ${formatNumber(p.y)}, ${formatNumber(p.z)});`);
+      lines.push(`obj.rotation.set(${formatNumber(r.x, 3)}, ${formatNumber(r.y, 3)}, ${formatNumber(r.z, 3)});`);
+      lines.push(`obj.scale.set(${formatNumber(s.x)}, ${formatNumber(s.y)}, ${formatNumber(s.z)});`);
+      if (obj.material && obj.material.color) {
+        const c = obj.material.color;
+        lines.push(``);
+        lines.push(`obj.material.color.setRGB(${formatNumber(c.r, 3)}, ${formatNumber(c.g, 3)}, ${formatNumber(c.b, 3)});`);
+      }
+      lines.push(``);
+      lines.push(`// Click handler`);
+      if (id) {
+        lines.push(`obj.userData.domEl.onclick = (evt) => {`);
+        lines.push(`  console.log('Clicked ${id}', evt.target3d, 'at', evt.pointerPosition);`);
+        lines.push(`};`);
+      }
+
+      return lines.join('\n');
+    }
+
+    function loadSnippetsForActive() {
+      const obj = activeObjectId ? getConvict(activeObjectId) : null;
+      const domEl = obj ? obj.userData.domEl : null;
+
+      if (!obj || !domEl) {
+        htmlEditor.value = '';
+        cssEditor.value = '';
+        jsEditor.value = '';
+        return;
+      }
+
+      if (!htmlSnippets.has(activeObjectId)) {
+        htmlSnippets.set(activeObjectId, buildHtmlSnippet(domEl));
+      }
+      if (!cssSnippets.has(activeObjectId)) {
+        cssSnippets.set(activeObjectId, buildCssSnippet(obj, domEl));
+      }
+      if (!jsSnippets.has(activeObjectId)) {
+        jsSnippets.set(activeObjectId, buildJsSnippet(obj, domEl));
+      }
+
+      htmlEditor.value = htmlSnippets.get(activeObjectId);
+      cssEditor.value = cssSnippets.get(activeObjectId);
+      jsEditor.value = jsSnippets.get(activeObjectId);
+    }
+
+    function parseVectorTuple(str) {
+      const m = /\(([^)]+)\)/.exec(str);
+      if (!m) return null;
+      const parts = m[1].split(',').map(v => parseFloat(v));
+      if (parts.length < 3) return null;
+      return {
+        x: Number.isFinite(parts[0]) ? parts[0] : 0,
+        y: Number.isFinite(parts[1]) ? parts[1] : 0,
+        z: Number.isFinite(parts[2]) ? parts[2] : 0
+      };
+    }
+
+    function parseScalar(str) {
+      const m = /(-?\d+(\.\d+)?)/.exec(str);
+      if (!m) return null;
+      const v = parseFloat(m[1]);
+      return Number.isFinite(v) ? v : null;
+    }
+
+    function applyCssSnippetToObject() {
+      if (!activeObjectId) return;
+      const obj = getConvict(activeObjectId);
+      const domEl = obj ? obj.userData.domEl : null;
+      if (!obj || !domEl) return;
+
+      const css = cssEditor.value || '';
+      const lines = css.split('\n').map(l => l.trim());
+
+      function findLine(prefix) {
+        const line = lines.find(l => l.startsWith(prefix));
+        return line || null;
+      }
+
+      const posLine = findLine('--position:');
+      if (posLine) {
+        const v = parseVectorTuple(posLine);
+        if (v) obj.position.set(v.x, v.y, v.z);
+        domEl.style.setProperty('--position', `(${v.x}, ${v.y}, ${v.z})`);
+      }
+
+      const rxLine = findLine('--rotation-x:');
+      const ryLine = findLine('--rotation-y:');
+      const rzLine = findLine('--rotation-z:');
+
+      const rvx = rxLine ? parseScalar(rxLine) : obj.rotation.x;
+      const rvy = ryLine ? parseScalar(ryLine) : obj.rotation.y;
+      const rvz = rzLine ? parseScalar(rzLine) : obj.rotation.z;
+
+      if (rxLine || ryLine || rzLine) {
+        obj.rotation.set(
+          Number.isFinite(rvx) ? rvx : obj.rotation.x,
+          Number.isFinite(rvy) ? rvy : obj.rotation.y,
+          Number.isFinite(rvz) ? rvz : obj.rotation.z
+        );
+        domEl.style.setProperty('--rotation-x', obj.rotation.x);
+        domEl.style.setProperty('--rotation-y', obj.rotation.y);
+        domEl.style.setProperty('--rotation-z', obj.rotation.z);
+      }
+
+      const sclLine = findLine('--scale:');
+      if (sclLine) {
+        const v = parseVectorTuple(sclLine);
+        if (v) obj.scale.set(v.x, v.y, v.z);
+        domEl.style.setProperty('--scale', `(${obj.scale.x}, ${obj.scale.y}, ${obj.scale.z})`);
+      }
+
+      const colLine = findLine('--material-color:');
+      if (colLine && obj.material && obj.material.color) {
+        const v = parseVectorTuple(colLine);
+        if (v) {
+          obj.material.color.setRGB(v.x, v.y, v.z);
+          domEl.style.setProperty('--material-color', `(${v.x}, ${v.y}, ${v.z})`);
         }
-        function placeBlock(event){
-            console.log(event);
-            const block = document.createElement('mesh');
-            block.className = "placed_block";
-            const setPos = navmeshelm.style.getPropertyValue("--position");
-            block.style.setProperty("--position",setPos);
-            block.style.setProperty("--material-color", `(${Math.random().toFixed(2)},${Math.random().toFixed(2)},${Math.random().toFixed(2)})`);
-            block.setAttribute("onmouseover","moveNavCube(event)");
-            block.setAttribute("onclick","placeBlock(event)");
-            document.querySelector("cell").appendChild(block);
+      }
+
+      updateInspectorFromActive();
+    }
+
+    function updateCssFromObjectToSnippet() {
+      const obj = activeObjectId ? getConvict(activeObjectId) : null;
+      const domEl = obj ? obj.userData.domEl : null;
+      if (!obj || !domEl) return;
+
+      const generated = buildCssSnippet(obj, domEl);
+      cssSnippets.set(activeObjectId, generated);
+      cssEditor.value = generated;
+    }
+
+    function applyHtmlSnippetToDom() {
+      if (!activeObjectId) return;
+      const obj = getConvict(activeObjectId);
+      const domEl = obj ? obj.userData.domEl : null;
+      if (!obj || !domEl) return;
+
+      const src = htmlEditor.value || '';
+      const tagMatch = /<\s*([a-zA-Z0-9-]+)\s*([^>]*)>/m.exec(src);
+      if (!tagMatch) return;
+
+      const attrsStr = tagMatch[2] || '';
+
+      const attrRegex = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)="([^"]*)"/g;
+      let m;
+      while ((m = attrRegex.exec(attrsStr)) !== null) {
+        const name = m[1];
+        const value = m[2];
+
+        if (name === 'id') {
+          // changing id would desync Cell mapping; ignore for now
+          continue;
+        } else if (name === 'class') {
+          const classes = value.split(/\s+/).filter(Boolean);
+          if (!classes.includes('scene-object')) classes.push('scene-object');
+          domEl.className = classes.join(' ');
+        } else if (name === 'data-label') {
+          domEl.dataset.label = value;
+        } else {
+          domEl.setAttribute(name, value);
         }
-        function test(event){
-            console.log(event);
+      }
+
+      updateObjectList();
+      setActiveObject(activeObjectId);
+    }
+
+    function runJsSnippetForActive() {
+      if (!activeObjectId) return;
+      const obj = getConvict(activeObjectId);
+      if (!obj) return;
+      const code = jsEditor.value || '';
+      if (!code.trim()) return;
+
+      try {
+        const fn = new Function('obj', 'cell', 'THREE', code);
+        fn(obj, cell, THREE);
+      } catch (err) {
+        console.warn('JS snippet error:', err);
+      }
+    }
+
+    function applySnippetsToActive() {
+      applyHtmlSnippetToDom();
+      applyCssSnippetToObject();
+      runJsSnippetForActive();
+    }
+
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        console.warn('Clipboard copy failed', e);
+      }
+    }
+
+    copyHtmlBtn.addEventListener('click', () => htmlEditor.value && copyToClipboard(htmlEditor.value));
+    copyCssBtn.addEventListener('click', () => cssEditor.value && copyToClipboard(cssEditor.value));
+    copyJsBtn.addEventListener('click', () => jsEditor.value && copyToClipboard(jsEditor.value));
+
+    function debounce(fn, ms) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+      };
+    }
+
+    htmlEditor.addEventListener('input', debounce(() => {
+      if (!activeObjectId) return;
+      htmlSnippets.set(activeObjectId, htmlEditor.value);
+      applyHtmlSnippetToDom();
+    }, 200));
+
+    cssEditor.addEventListener('input', debounce(() => {
+      if (!activeObjectId) return;
+      cssSnippets.set(activeObjectId, cssEditor.value);
+      applyCssSnippetToObject();
+      runJsSnippetForActive();
+    }, 200));
+
+    jsEditor.addEventListener('input', debounce(() => {
+      if (!activeObjectId) return;
+      jsSnippets.set(activeObjectId, jsEditor.value);
+      runJsSnippetForActive();
+    }, 300));
+
+    // ------- Timeline / keyframes -----------------------------------------
+    function updateTimelineUIFromTime() {
+      const t = THREE.MathUtils.clamp(currentTime01, 0, 1);
+      const frame = Math.round(t * (TOTAL_FRAMES - 1)) + 1;
+      timelineKnobEl.style.left = `${t * 100}%`;
+      timelineTimeLabel.textContent = `F: ${frame} / ${TOTAL_FRAMES}`;
+    }
+
+    function setTimelineFromClientX(clientX) {
+      const rect = timelineScrubEl.getBoundingClientRect();
+      let t = (clientX - rect.left) / rect.width;
+      t = THREE.MathUtils.clamp(t, 0, 1);
+      currentTime01 = t;
+      updateTimelineUIFromTime();
+      applyKeyframedTransformForActive();
+    }
+
+    timelineScrubEl.addEventListener('mousedown', (evt) => {
+      isScrubbing = true;
+      setTimelineFromClientX(evt.clientX);
+    });
+
+    window.addEventListener('mousemove', (evt) => {
+      if (!isScrubbing) return;
+      setTimelineFromClientX(evt.clientX);
+    });
+
+    window.addEventListener('mouseup', () => { isScrubbing = false; });
+
+    function getKeyframesForId(id) {
+      if (!keyframesById.has(id)) {
+        keyframesById.set(id, []);
+      }
+      const arr = keyframesById.get(id);
+      arr.sort((a, b) => a.time - b.time);
+      return arr;
+    }
+
+    function addKeyframeForActive() {
+      if (!activeObjectId) return;
+      const obj = getConvict(activeObjectId);
+      if (!obj) return;
+
+      const kfs = getKeyframesForId(activeObjectId);
+      const time = currentTime01;
+
+      const existing = kfs.find(k => Math.abs(k.time - time) < 1e-3);
+      const p = obj.position;
+      const r = obj.rotation;
+      const s = obj.scale;
+
+      const payload = {
+        time,
+        pos: { x: p.x, y: p.y, z: p.z },
+        rot: { x: r.x, y: r.y, z: r.z },
+        scale: { x: s.x, y: s.y, z: s.z }
+      };
+
+      if (existing) Object.assign(existing, payload);
+      else {
+        kfs.push(payload);
+        kfs.sort((a, b) => a.time - b.time);
+      }
+    }
+
+    addKeyframeBtn.addEventListener('click', addKeyframeForActive);
+
+    function applyKeyframedTransform(obj, t) {
+      const id = obj?.userData?.domEl?.id;
+      if (!id) return;
+      const kfs = getKeyframesForId(id);
+      if (!kfs.length) return;
+
+      if (kfs.length === 1) {
+        const k = kfs[0];
+        obj.position.set(k.pos.x, k.pos.y, k.pos.z);
+        obj.rotation.set(k.rot.x, k.rot.y, k.rot.z);
+        obj.scale.set(k.scale.x, k.scale.y, k.scale.z);
+        return;
+      }
+
+      let k0 = kfs[0];
+      let k1 = kfs[kfs.length - 1];
+
+      if (t <= k0.time) {
+        // clamp to first
+      } else if (t >= k1.time) {
+        k0 = k1;
+      } else {
+        for (let i = 0; i < kfs.length - 1; i++) {
+          const a = kfs[i];
+          const b = kfs[i + 1];
+          if (t >= a.time && t <= b.time) {
+            k0 = a;
+            k1 = b;
+            break;
+          }
+        }
+      }
+
+      if (k0 === k1) {
+        obj.position.set(k0.pos.x, k0.pos.y, k0.pos.z);
+        obj.rotation.set(k0.rot.x, k0.rot.y, k0.rot.z);
+        obj.scale.set(k0.scale.x, k0.scale.y, k0.scale.z);
+        return;
+      }
+
+      const span = k1.time - k0.time || 1;
+      const alpha = THREE.MathUtils.clamp((t - k0.time) / span, 0, 1);
+      const lerp = (a, b) => a + (b - a) * alpha;
+
+      obj.position.set(
+        lerp(k0.pos.x, k1.pos.x),
+        lerp(k0.pos.y, k1.pos.y),
+        lerp(k0.pos.z, k1.pos.z)
+      );
+      obj.rotation.set(
+        lerp(k0.rot.x, k1.rot.x),
+        lerp(k0.rot.y, k1.rot.y),
+        lerp(k0.rot.z, k1.rot.z)
+      );
+      obj.scale.set(
+        lerp(k0.scale.x, k1.scale.x),
+        lerp(k0.scale.y, k1.scale.y),
+        lerp(k0.scale.z, k1.scale.z)
+      );
+    }
+
+    function applyKeyframedTransformForActive() {
+      if (!activeObjectId) return;
+      const obj = getConvict(activeObjectId);
+      if (!obj) return;
+      applyKeyframedTransform(obj, currentTime01);
+      updateInspectorFromActive();
+      updateCssFromObjectToSnippet();
+      runJsSnippetForActive();
+    }
+
+    timelinePlayBtn.addEventListener('click', () => {
+      playing = !playing;
+      timelinePlayBtn.textContent = playing ? '⏸' : '▶';
+      lastTimelineTime = performance.now();
+    });
+
+    // ------- FPS mode ------------------------------------------------------
+    function updateViewportModeIndicator() {
+      viewportModeIndicator.textContent = fpsMode ? 'FPS' : 'Orbit';
+      viewportModeIndicator.classList.toggle('fps', fpsMode);
+    }
+
+    function onFPSMouseMove(evt) {
+      if (!fpsMode) return;
+      const cam = cell ? cell.getConvictById('cam') : null;
+      if (!cam) return;
+
+      const sensitivity = 0.0025;
+      fpsYaw -= evt.movementX * sensitivity;
+      fpsPitch -= evt.movementY * sensitivity;
+      const maxPitch = Math.PI / 2 - 0.1;
+      fpsPitch = THREE.MathUtils.clamp(fpsPitch, -maxPitch, maxPitch);
+
+      cam.rotation.set(fpsPitch, fpsYaw, 0, 'YXZ');
+    }
+
+    function onFPSKeyDown(evt) {
+      switch (evt.code) {
+        case 'KeyW': moveState.forward = 1; break;
+        case 'KeyS': moveState.back = 1; break;
+        case 'KeyA': moveState.left = 1; break;
+        case 'KeyD': moveState.right = 1; break;
+        case 'Space': moveState.up = 1; break;
+        case 'ControlLeft':
+        case 'ControlRight': moveState.down = 1; break;
+      }
+    }
+
+    function onFPSKeyUp(evt) {
+      switch (evt.code) {
+        case 'KeyW': moveState.forward = 0; break;
+        case 'KeyS': moveState.back = 0; break;
+        case 'KeyA': moveState.left = 0; break;
+        case 'KeyD': moveState.right = 0; break;
+        case 'Space': moveState.up = 0; break;
+        case 'ControlLeft':
+        case 'ControlRight': moveState.down = 0; break;
+      }
+    }
+
+    function enableFPS(canvas) {
+      if (fpsMode) return;
+      fpsMode = true;
+      updateViewportModeIndicator();
+
+      const cam = cell ? cell.getConvictById('cam') : null;
+      if (cam) {
+        fpsYaw = cam.rotation.y;
+        fpsPitch = cam.rotation.x;
+      }
+
+      lastFpsTime = performance.now();
+
+      canvas.requestPointerLock?.();
+
+      window.addEventListener('mousemove', onFPSMouseMove);
+      window.addEventListener('keydown', onFPSKeyDown);
+      window.addEventListener('keyup', onFPSKeyUp);
+
+      if (!fpsUpdateFn) {
+        fpsUpdateFn = function () {
+          if (!fpsMode) return;
+          const now = performance.now();
+          const dt = (now - lastFpsTime) / 1000;
+          lastFpsTime = now;
+
+          const cam = this.getConvictById('cam');
+          if (!cam) return;
+
+          cam.rotation.set(fpsPitch, fpsYaw, 0, 'YXZ');
+
+          const forward = new THREE.Vector3(
+            Math.sin(fpsYaw),
+            0,
+            -Math.cos(fpsYaw)
+          );
+          const right = new THREE.Vector3().crossVectors(forward, cam.up).normalize();
+          const speed = 5;
+
+          const f = moveState.forward - moveState.back;
+          const r = moveState.right - moveState.left;
+          const u = moveState.up - moveState.down;
+
+          cam.position.addScaledVector(forward, f * speed * dt);
+          cam.position.addScaledVector(right, r * speed * dt);
+          cam.position.y += u * speed * dt;
         };
-    </script>
-    <script type = "module" src="./module/main.js"></script>
+        cell.addUpdateFunction(fpsUpdateFn);
+      }
+    }
+
+    function disableFPS() {
+      if (!fpsMode) return;
+      fpsMode = false;
+      updateViewportModeIndicator();
+
+      if (document.pointerLockElement) document.exitPointerLock?.();
+
+      window.removeEventListener('mousemove', onFPSMouseMove);
+      window.removeEventListener('keydown', onFPSKeyDown);
+      window.removeEventListener('keyup', onFPSKeyUp);
+
+      moveState.forward = moveState.back = 0;
+      moveState.left = moveState.right = 0;
+      moveState.up = moveState.down = 0;
+    }
+
+    document.addEventListener('pointerlockchange', () => {
+      if (!document.pointerLockElement && fpsMode) disableFPS();
+    });
+
+    function toggleFPS(canvas) {
+      if (fpsMode) disableFPS();
+      else enableFPS(canvas);
+    }
+
+    // ------- init ----------------------------------------------------------
+    [posX, posY, posZ, rotX, rotY, rotZ, sclX, sclY, sclZ].forEach((input) => {
+      input.addEventListener('input', applyTransformFromInputs);
+    });
+
+    colorInput.addEventListener('input', applyColorFromInput);
+
+    btnAddCube.addEventListener('click', addCube);
+    btnAddLight.addEventListener('click', addLight);
+    btnFrameAll.addEventListener('click', frameAll);
+    btnResetView.addEventListener('click', resetView);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.JThree && typeof window.JThree.init_convert === 'function') {
+        window.JThree.init_convert();
+      }
+
+      cell = Cell.getCell(cellEl);
+      if (!cell) {
+        console.error('Failed to get Cell for scene-cell');
+        return;
+      }
+
+      setupCameraAndLights();
+      setupScrollZoom();
+      updateObjectList();
+      updateTimelineUIFromTime();
+      setGizmoMode('translate');
+      updateViewportModeIndicator();
+
+      const canvas = cell.threeRenderer.domElement;
+      if (canvas) {
+        canvas.addEventListener('mousedown', (evt) => {
+          if (evt.button === 0 && evt.shiftKey) {
+            evt.preventDefault();
+            toggleFPS(canvas);
+          }
+        });
+      }
+
+      if (!timelineUpdateFn) {
+        timelineUpdateFn = function () {
+          if (!playing) return;
+          const now = performance.now();
+          const dt = (now - lastTimelineTime) / 1000;
+          lastTimelineTime = now;
+
+          const durationSeconds = 5;
+          currentTime01 += dt / durationSeconds;
+          if (currentTime01 > 1) currentTime01 -= 1;
+
+          updateTimelineUIFromTime();
+          applyKeyframedTransformForActive();
+        };
+        cell.addUpdateFunction(timelineUpdateFn);
+      }
+    });
+  </script>
 </body>
 </html>
