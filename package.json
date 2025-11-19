@@ -1,6 +1,6 @@
 {
   "name": "JailedThreeJS",
-  "version": "0.9.1",
+  "version": "0.9.2-beta.0",
   "description": "Dedicated To Willson :D, A small, fast and lightweight Three.js framework.",
   "license": "MIT",
   "author": "M.K.",
@@ -12,22 +12,22 @@
     "dist/"
   ],
   "keywords": [
-  "threejs",
-  "three-js",
-  "webgl",
-  "3d",
-  "3d-engine",
-  "css",
-  "css-variables",
-  "html",
-  "dom",
-  "declarative-3d",
-  "scene-graph",
-  "animation",
-  "raycaster",
-  "gltf",
-  "fbx"
-],
+    "threejs",
+    "three-js",
+    "webgl",
+    "3d",
+    "3d-engine",
+    "css",
+    "css-variables",
+    "html",
+    "dom",
+    "declarative-3d",
+    "scene-graph",
+    "animation",
+    "raycaster",
+    "gltf",
+    "fbx"
+  ],
   "scripts": {
     "dev": "vite"
   },
