@@ -31,21 +31,7 @@ Notes:
 - `convict.classList` is a JailedThreeJS compatibility alias (not native Three.js API).
 - `convict.userData.domId` and `convict.userData.classList` are also maintained.
 
-## Installation
-
-```bash
-npm install
-```
-
-For local development in this repo:
-
-```bash
-npm run dev
-```
-
-This project uses Vite with `src/` as the root.
-
-## npm Package Usage
+## Install
 
 Install with `three`:
 
@@ -62,7 +48,6 @@ import { JThree, Cell } from 'jailedthreejs';
 Package entrypoint notes:
 
 - npm publishes the library build from `dist/lib/`
-- the demo/test page build is separate (`dist/demo/`) and is not the npm entrypoint
 
 ## Minimal Example
 
@@ -228,29 +213,9 @@ Custom assets can be declared in CSS-like at-rules:
 
 Supported loader types include GLTF/GLB, FBX, textures, audio, MTL, and material JSON.
 
-## Demo / Test Page
-
-`src/index.html` is a dedicated test/demo page for verifying runtime mapping and interaction behavior.
-
-It includes:
-
-- object selection
-- live DOM `id`/`class` mutation controls
-- runtime readout (`convict.name`, `convict.classList`, `userData.*`)
-- a mapping verification button
-
 ## Build Outputs
 
 - `npm run build:lib` -> builds the npm library package output to `dist/lib`
-- `npm run build:demo` -> builds the demo page to `dist/demo`
-- `npm run pack:check` -> runs `npm pack --dry-run` to inspect publish contents
-
-## Manual Releases (npm + GitHub)
-
-- Beta releases publish with npm dist-tag `beta`
-- Stable releases publish with npm dist-tag `latest`
-- GitHub Releases are created manually from tags
-See `RELEASE.md` for the step-by-step checklist and command examples.
 
 ## Performance Notes (Current)
 
