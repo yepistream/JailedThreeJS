@@ -5,11 +5,15 @@
   "license": "MIT",
   "author": "M.K.",
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "exports": "./dist/index.js",
+  "main": "dist/lib/index.js",
+  "module": "dist/lib/index.js",
+  "exports": {
+    ".": "./dist/lib/index.js"
+  },
   "files": [
-    "dist/"
+    "dist/lib/",
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "threejs",
@@ -29,7 +33,12 @@
     "fbx"
   ],
   "scripts": {
-    "dev": "vite"
+    "dev": "vite --config vite.config.js",
+    "build": "npm run build:lib",
+    "build:lib": "vite build --config vite.config.lib.js",
+    "build:demo": "vite build --config vite.config.js",
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build:lib"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",

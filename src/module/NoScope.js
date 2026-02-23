@@ -5,7 +5,7 @@
 // objects live on layer 3.
 
 import * as THREE from 'three';
-import { paintExtraCell, paintSpecificMuse } from './artist.js';
+import { paintSpecificMuse } from './artist.js';
 import { fastRemove_arry } from './utils.js';
 
 const raycaster = new THREE.Raycaster();
@@ -17,20 +17,35 @@ raycaster.layers.set(3);
 /* Flag helpers */
 
 function addFlag(arr, flag) {
-  if (!arr.includes(flag)) arr.push(flag);
+  if (arr.includes(flag)) return false;
+  arr.push(flag);
+  return true;
 }
 
 function delFlag(arr, flag) {
+  const hadFlag = arr.includes(flag);
+  if (!hadFlag) return false;
   fastRemove_arry(arr, flag);
+  return true;
 }
 
 /* Public handlers */
 
+function _flushPendingPointerMove(cell) {
+  if (!cell?._pointerMoveRaf || !cell._pendingPointerMoveEvt) return;
+  cancelAnimationFrame(cell._pointerMoveRaf);
+  cell._pointerMoveRaf = 0;
+  const evt = cell._pendingPointerMoveEvt;
+  cell._pendingPointerMoveEvt = null;
+  _processPointerMove(evt, cell);
+}
+
 export function default_onCellClick_method(domEvt, cell) {
+  _flushPendingPointerMove(cell);
   const hit = cell._last_cast_caught;
   if (!hit) return;
 
-  addFlag(hit.userData.extraParams, ':focus');
+  const focusChanged = addFlag(hit.userData.extraParams, ':focus');
 
   const synth = {
     type: 'cellclick',
@@ -42,12 +57,25 @@ export function default_onCellClick_method(domEvt, cell) {
   };
 
   hit.userData.domEl.onclick?.call(hit.userData.domEl, synth);
-  paintExtraCell(cell);
+  if (focusChanged) paintSpecificMuse(hit);
 }
 
 export function default_onCellPointerMove_method(domEvt, cell) {
   if (!cell.focusedCamera) return;
 
+  cell._pendingPointerMoveEvt = domEvt;
+  if (cell._pointerMoveRaf) return;
+
+  cell._pointerMoveRaf = requestAnimationFrame(() => {
+    const evt = cell._pendingPointerMoveEvt;
+    cell._pendingPointerMoveEvt = null;
+    cell._pointerMoveRaf = 0;
+    if (!evt || !cell._running) return;
+    _processPointerMove(evt, cell);
+  });
+}
+
+function _processPointerMove(domEvt, cell) {
   _raycast(domEvt, cell.focusedCamera, cell.cellElm);
 
   const hitResult = raycaster.intersectObjects(cell.loadedScene.children, true)[0];
@@ -55,10 +83,11 @@ export function default_onCellPointerMove_method(domEvt, cell) {
 
   if (hitResult) {
     const hitObject = hitResult.object;
+    let shouldRepaintCurrent = false;
 
     if (hitObject !== lastHit) {
       if (lastHit) {
-        delFlag(lastHit.userData.extraParams, ':hover');
+        const hoverRemoved = delFlag(lastHit.userData.extraParams, ':hover');
         lastHit.userData.domEl.onmouseleave?.call(lastHit.userData.domEl, {
           type: 'cellmouseleave',
           originalEvt: domEvt,
@@ -67,7 +96,7 @@ export function default_onCellPointerMove_method(domEvt, cell) {
           targetElement: lastHit.userData.domEl,
           pointerPosition: cell._lastHitPosition
         });
-        paintSpecificMuse(lastHit);
+        if (hoverRemoved) paintSpecificMuse(lastHit);
       }
 
       cell._last_cast_caught = hitObject;
@@ -80,9 +109,12 @@ export function default_onCellPointerMove_method(domEvt, cell) {
         targetElement: hitObject.userData.domEl,
         pointerPosition: hitResult.point
       });
+      shouldRepaintCurrent = true;
     }
 
-    addFlag(hitObject.userData.extraParams, ':hover');
+    if (addFlag(hitObject.userData.extraParams, ':hover')) {
+      shouldRepaintCurrent = true;
+    }
     cell._lastHitPosition = hitResult.point;
 
     hitObject.userData.domEl.onmouseover?.call(hitObject.userData.domEl, {
@@ -94,9 +126,9 @@ export function default_onCellPointerMove_method(domEvt, cell) {
       pointerPosition: hitResult.point
     });
 
-    paintExtraCell(cell);
+    if (shouldRepaintCurrent) paintSpecificMuse(hitObject);
   } else if (lastHit) {
-    delFlag(lastHit.userData.extraParams, ':hover');
+    const hoverRemoved = delFlag(lastHit.userData.extraParams, ':hover');
     lastHit.userData.domEl.onmouseleave?.call(lastHit.userData.domEl, {
       type: 'cellmouseleave',
       originalEvt: domEvt,
@@ -105,16 +137,17 @@ export function default_onCellPointerMove_method(domEvt, cell) {
       targetElement: lastHit.userData.domEl,
       pointerPosition: cell._lastHitPosition
     });
-    paintSpecificMuse(lastHit);
+    if (hoverRemoved) paintSpecificMuse(lastHit);
     cell._last_cast_caught = null;
   }
 }
 
 export function default_onCellMouseDown_method(domEvt, cell) {
+  _flushPendingPointerMove(cell);
   const hit = cell._last_cast_caught;
   if (!hit) return;
 
-  addFlag(hit.userData.extraParams, ':active');
+  const activeChanged = addFlag(hit.userData.extraParams, ':active');
 
   const synth = {
     type: 'celldown',
@@ -126,14 +159,15 @@ export function default_onCellMouseDown_method(domEvt, cell) {
   };
 
   hit.userData.domEl.onmousedown?.call(hit.userData.domEl, synth);
-  paintExtraCell(cell);
+  if (activeChanged) paintSpecificMuse(hit);
 }
 
 export function default_onCellMouseUp_method(domEvt, cell) {
+  _flushPendingPointerMove(cell);
   const hit = cell._last_cast_caught;
   if (!hit) return;
 
-  delFlag(hit.userData.extraParams, ':active');
+  const activeChanged = delFlag(hit.userData.extraParams, ':active');
 
   const synth = {
     type: 'cellup',
@@ -145,14 +179,15 @@ export function default_onCellMouseUp_method(domEvt, cell) {
   };
 
   hit.userData.domEl.onmouseup?.call(hit.userData.domEl, synth);
-  paintExtraCell(cell);
+  if (activeChanged) paintSpecificMuse(hit);
 }
 
 export function default_onCellDoubleClick_method(domEvt, cell) {
+  _flushPendingPointerMove(cell);
   const hit = cell._last_cast_caught;
   if (!hit) return;
 
-  addFlag(hit.userData.extraParams, ':focus');
+  const focusChanged = addFlag(hit.userData.extraParams, ':focus');
 
   const synth = {
     type: 'celldblclick',
@@ -164,10 +199,11 @@ export function default_onCellDoubleClick_method(domEvt, cell) {
   };
 
   hit.userData.domEl.ondblclick?.call(hit.userData.domEl, synth);
-  paintExtraCell(cell);
+  if (focusChanged) paintSpecificMuse(hit);
 }
 
 export function default_onCellContextMenu_method(domEvt, cell) {
+  _flushPendingPointerMove(cell);
   const hit = cell._last_cast_caught;
   if (!hit) return;
 
@@ -181,7 +217,6 @@ export function default_onCellContextMenu_method(domEvt, cell) {
   };
 
   hit.userData.domEl.oncontextmenu?.call(hit.userData.domEl, synth);
-  paintExtraCell(cell);
 }
 
 /* Internal raycast helper */

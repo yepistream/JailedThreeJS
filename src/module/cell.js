@@ -8,15 +8,13 @@
 // - Per-frame update callbacks
 
 import * as THREE from 'three';
-import { fastRemove_arry, getClassMap } from './utils.js';
+import { getClassMap } from './utils.js';
 import {
   paintCell,
   paintConvict,
-  deep_searchParms,
-  paintSpecificMuse,
-  paintConstantMuse,
-  getCSSRule
+  paintSpecificMuse
 } from './artist.js';
+import { markGlobalStyleCacheDirty } from './styleCache.js';
 import {
   default_onCellClick_method,
   default_onCellPointerMove_method,
@@ -61,21 +59,17 @@ class Cell {
     this.loadedScene = scene;
     this.focusedCamera = camera;
 
-    this.constantConvicts = [];
-    this.classyConvicts = [];
-    this.namedConvicts = [];
+    this.classyConvicts = new Set();
+    this.namedConvicts = new Set();
     this._allConvictsByDom = new WeakMap();
+    this._convictsById = new Map();
+    this._convictsByClass = new Map();
 
     this.updateFunds = [];
     this._observedStyleElements = new WeakSet();
     this._pendingStyleRepaint = false;
-
-    // paint constant :active rules each frame
-    this.updateFunds.push(() => {
-      this.constantConvicts.forEach(cC => {
-        paintConstantMuse(cC);
-      });
-    });
+    this._pointerMoveRaf = 0;
+    this._pendingPointerMoveEvt = null;
 
     this._last_cast_caught = null;
     this._lastHitPosition = null;
@@ -118,11 +112,12 @@ class Cell {
     // Observe <style> content so keyframes / rules updates repaint
     this._styleElemObserver = new MutationObserver(() => {
       if (this._pendingStyleRepaint) return;
+      markGlobalStyleCacheDirty();
       this._pendingStyleRepaint = true;
       requestAnimationFrame(() => {
         this._pendingStyleRepaint = false;
         paintCell(this);
-        this.classyConvicts.concat(this.namedConvicts).forEach(paintSpecificMuse);
+        this._repaintKnownConvicts();
       });
     });
 
@@ -147,11 +142,25 @@ class Cell {
 
     this._styleHostObserver = new MutationObserver(mutationList => {
       mutationList.forEach(mutation => {
+        let styleTreeChanged = false;
         mutation.addedNodes.forEach(node => {
           if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'STYLE') {
             this._observeStyleElements(node);
+            styleTreeChanged = true;
+          } else if (node.nodeType === Node.ELEMENT_NODE && typeof node.querySelector === 'function' && node.querySelector('style')) {
+            this._observeStyleElements(node);
+            styleTreeChanged = true;
           }
         });
+        mutation.removedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE && (node.nodeName === 'STYLE' || (typeof node.querySelector === 'function' && node.querySelector('style')))) {
+            styleTreeChanged = true;
+          }
+        });
+        if (styleTreeChanged) {
+          markGlobalStyleCacheDirty();
+          this._scheduleFullRepaint();
+        }
       });
     });
 
@@ -176,7 +185,8 @@ class Cell {
               if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== 'CANVAS') {
                 if (node.nodeName === 'STYLE') {
                   this._observeStyleElements(node);
-                  paintCell(this);
+                  markGlobalStyleCacheDirty();
+                  this._scheduleFullRepaint();
                 } else {
                   this.ScanElement(node);
                   const convict = this.getConvictByDom(node);
@@ -189,6 +199,10 @@ class Cell {
             for (let i = 0; i < mutation.removedNodes.length; i++) {
               const node = mutation.removedNodes[i];
               if (node.nodeType === Node.ELEMENT_NODE && node.nodeName !== 'CANVAS') {
+                if (node.nodeName === 'STYLE' || (typeof node.querySelector === 'function' && node.querySelector('style'))) {
+                  markGlobalStyleCacheDirty();
+                  this._scheduleFullRepaint();
+                }
                 this.removeConvict(this._allConvictsByDom.get(node));
               }
             }
@@ -200,11 +214,11 @@ class Cell {
             if (!convict) break;
 
             if (mutation.attributeName === 'id') {
-              convict.userData.domId = target.id;
+              this._syncConvictIdentity(convict, target);
+              paintSpecificMuse(convict);
             } else if (mutation.attributeName === 'class') {
-              const nextClasses = Array.from(target.classList).filter(Boolean);
-              convict.userData.classList = nextClasses;
-              convict.name = nextClasses[0] || '';
+              this._syncConvictIdentity(convict, target);
+              paintSpecificMuse(convict);
             } else if (mutation.attributeName === 'style') {
               // inline style changed; repaint this convict
               paintConvict(target, this);
@@ -257,6 +271,125 @@ class Cell {
     this._resizeObserver.observe(this.cellElm);
 
     this._anim();
+  }
+
+  _scheduleFullRepaint() {
+    if (this._pendingStyleRepaint) return;
+    this._pendingStyleRepaint = true;
+    requestAnimationFrame(() => {
+      this._pendingStyleRepaint = false;
+      paintCell(this);
+      this._repaintKnownConvicts();
+    });
+  }
+
+  _repaintKnownConvicts() {
+    const visited = new Set();
+    for (const convict of this.classyConvicts) {
+      if (!visited.has(convict)) {
+        visited.add(convict);
+        paintSpecificMuse(convict);
+      }
+    }
+    for (const convict of this.namedConvicts) {
+      if (!visited.has(convict)) {
+        visited.add(convict);
+        paintSpecificMuse(convict);
+      }
+    }
+  }
+
+  _normalizeClassList(input) {
+    if (Array.isArray(input)) return input.filter(Boolean).map(String);
+    if (typeof input === 'string') return input.split(/\s+/).filter(Boolean);
+    if (input && typeof input[Symbol.iterator] === 'function') {
+      return Array.from(input).filter(Boolean).map(String);
+    }
+    return [];
+  }
+
+  _ensureConvictClassAlias(convict) {
+    if (Object.prototype.hasOwnProperty.call(convict, 'classList')) return;
+    Object.defineProperty(convict, 'classList', {
+      enumerable: false,
+      configurable: true,
+      get() {
+        return this.userData.classList;
+      },
+      set(value) {
+        let next = [];
+        if (Array.isArray(value)) {
+          next = value.filter(Boolean).map(String);
+        } else if (typeof value === 'string') {
+          next = value.split(/\s+/).filter(Boolean);
+        } else if (value && typeof value[Symbol.iterator] === 'function') {
+          next = Array.from(value).filter(Boolean).map(String);
+        }
+        const domEl = this.userData?.domEl;
+        if (domEl && domEl.className !== next.join(' ')) {
+          domEl.className = next.join(' ');
+          return;
+        }
+        this.userData.classList = next;
+      }
+    });
+  }
+
+  _removeClassIndex(convict, className) {
+    const bucket = this._convictsByClass.get(className);
+    if (!bucket) return;
+    bucket.delete(convict);
+    if (bucket.size === 0) {
+      this._convictsByClass.delete(className);
+    }
+  }
+
+  _syncConvictIdentity(convict, elm) {
+    if (!convict || !elm) return;
+
+    const prevId = convict.userData.domId || '';
+    const prevClasses = Array.isArray(convict.userData.classList)
+      ? convict.userData.classList
+      : [];
+
+    const nextId = elm.id || '';
+    const nextClasses = this._normalizeClassList(elm.classList);
+
+    if (prevId && this._convictsById.get(prevId) === convict) {
+      this._convictsById.delete(prevId);
+    }
+    for (const cls of prevClasses) {
+      this._removeClassIndex(convict, cls);
+    }
+
+    convict.userData.domId = nextId;
+    convict.userData.classList = nextClasses;
+    if (nextId) {
+      convict.name = nextId;
+    } else if (convict.name === prevId) {
+      convict.name = '';
+    }
+
+    if (nextId) {
+      this._convictsById.set(nextId, convict);
+      this.namedConvicts.add(convict);
+    } else {
+      this.namedConvicts.delete(convict);
+    }
+
+    if (nextClasses.length) {
+      this.classyConvicts.add(convict);
+      for (const cls of nextClasses) {
+        let bucket = this._convictsByClass.get(cls);
+        if (!bucket) {
+          bucket = new Set();
+          this._convictsByClass.set(cls, bucket);
+        }
+        bucket.add(convict);
+      }
+    } else {
+      this.classyConvicts.delete(convict);
+    }
   }
 
   /**
@@ -333,31 +466,15 @@ class Cell {
 
     instance.userData.domEl = elm;
     instance.userData.extraParams = [];
+    instance.userData.domId = '';
     instance.userData.classList = [];
     instance.transition = null;
+    this._ensureConvictClassAlias(instance);
 
     parentObj.add(instance);
 
-    if (elm.id) {
-      instance.userData.domId = elm.id;
-      this.namedConvicts.push(instance);
-      if (!this.constantConvicts.includes(instance) && getCSSRule(`#${elm.id}:active`)) {
-        this.constantConvicts.push(instance);
-      }
-    }
-
-    const classList = Array.from(elm.classList || []).filter(Boolean);
-    if (classList.length) {
-      instance.userData.classList = classList;
-      instance.name = classList[0];
-      this.classyConvicts.push(instance);
-      const hasActiveRule = classList.some(cls => getCSSRule(`.${cls}:active`));
-      if (hasActiveRule && !this.constantConvicts.includes(instance)) {
-        this.constantConvicts.push(instance);
-      }
-    }
-
     this._allConvictsByDom.set(elm, instance);
+    this._syncConvictIdentity(instance, elm);
 
     for (let i = 0; i < elm.children.length; i++) {
       this.ScanElement(elm.children[i]);
@@ -406,9 +523,16 @@ class Cell {
       }
     });
 
-    fastRemove_arry(this.classyConvicts, convict);
-    fastRemove_arry(this.namedConvicts, convict);
-    fastRemove_arry(this.constantConvicts, convict);
+    const domId = convict.userData?.domId;
+    if (domId && this._convictsById.get(domId) === convict) {
+      this._convictsById.delete(domId);
+    }
+    const classes = Array.isArray(convict.userData?.classList) ? convict.userData.classList : [];
+    for (const cls of classes) {
+      this._removeClassIndex(convict, cls);
+    }
+    this.classyConvicts.delete(convict);
+    this.namedConvicts.delete(convict);
 
     if (convict.userData.domEl) {
       this._allConvictsByDom.delete(convict.userData.domEl);
@@ -435,8 +559,7 @@ class Cell {
    * @param {string} id
    */
   getConvictById(id) {
-    const el = document.getElementById(id);
-    return el ? this._allConvictsByDom.get(el) : undefined;
+    return this._convictsById.get(id);
   }
 
   /**
@@ -446,13 +569,7 @@ class Cell {
    * @returns {Array<THREE.Object3D>}
    */
   getConvictsByClass(className) {
-    const elements = Array.from(document.getElementsByClassName(className));
-    const out = [];
-    elements.forEach(elm => {
-      const convict = this.getConvictByDom(elm);
-      if (convict) out.push(convict);
-    });
-    return out;
+    return Array.from(this._convictsByClass.get(className) || []);
   }
 
   /**
@@ -490,6 +607,12 @@ class Cell {
     this._styleObserver.disconnect();
     this._styleElemObserver.disconnect();
     this._styleHostObserver.disconnect();
+
+    if (this._pointerMoveRaf) {
+      cancelAnimationFrame(this._pointerMoveRaf);
+      this._pointerMoveRaf = 0;
+    }
+    this._pendingPointerMoveEvt = null;
 
     this.cellElm.removeEventListener('mousemove', this._boundPointerMove);
     this.cellElm.removeEventListener('click', this._boundClick);

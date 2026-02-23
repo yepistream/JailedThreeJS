@@ -9,8 +9,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import { getGlobalStyleCacheVersion } from './styleCache.js';
 
 export let AllKeyFramesMap = new Map();
+let keyframesCacheVersion = -1;
 
 /**
  * Collect all @keyframes rules from loaded stylesheets.
@@ -18,6 +20,11 @@ export let AllKeyFramesMap = new Map();
  * @returns {Map<string, CSSKeyframesRule>}
  */
 export function gatherKeyFrame_MAP() {
+  const styleVersion = getGlobalStyleCacheVersion();
+  if (keyframesCacheVersion === styleVersion) {
+    return AllKeyFramesMap;
+  }
+
   AllKeyFramesMap.clear();
 
   const KEYFRAMES_TYPES = new Set();
@@ -40,6 +47,7 @@ export function gatherKeyFrame_MAP() {
     }
   }
 
+  keyframesCacheVersion = styleVersion;
   return AllKeyFramesMap;
 }
 
@@ -123,6 +131,11 @@ function storeAssetValue(key, value) {
  *   }
  */
 function gatherAssetRules() {
+  const styleVersion = getGlobalStyleCacheVersion();
+  if (gatherAssetRules._cacheVersion === styleVersion) {
+    return;
+  }
+
   const ignoreAtRules = new Set([
     'media', 'import', 'supports', 'keyframes', 'font-face', 'charset',
     'namespace', 'page', 'counter-style', 'font-feature-values', 'viewport'
@@ -180,6 +193,8 @@ function gatherAssetRules() {
       }
     }
   }
+
+  gatherAssetRules._cacheVersion = styleVersion;
 }
 
 /**

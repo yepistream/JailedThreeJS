@@ -11,11 +11,39 @@ import { getAsset } from './utils.js';
 import Cell from './cell.js';
 import { animateLerp, KeyFrameAnimationLerp } from './Train.js';
 import * as THREE from 'three';
+import { getGlobalStyleCacheVersion } from './styleCache.js';
+
+let selectorRuleCache = new Map();
+let selectorRuleCacheVersion = -1;
+let warnedLegacyNameClassFallback = false;
+
+function ensureSelectorRuleCache() {
+  const version = getGlobalStyleCacheVersion();
+  if (selectorRuleCacheVersion !== version) {
+    selectorRuleCache.clear();
+    selectorRuleCacheVersion = version;
+  }
+}
 
 function getObjectClassSelectors(object) {
-  const list = object?.userData?.classList;
-  if (Array.isArray(list) && list.length > 0) return list;
-  return object?.name ? [object.name] : [];
+  const aliasList = object?.classList;
+  if (Array.isArray(aliasList)) return aliasList;
+
+  if (object?.userData && Object.prototype.hasOwnProperty.call(object.userData, 'classList')) {
+    return Array.isArray(object.userData.classList) ? object.userData.classList : [];
+  }
+
+  if (object?.name) {
+    if (!warnedLegacyNameClassFallback) {
+      warnedLegacyNameClassFallback = true;
+      console.warn(
+        'JailedThreeJS: inferring CSS classes from Object3D.name is deprecated. Use object.classList/userData.classList.'
+      );
+    }
+    return [object.name];
+  }
+
+  return [];
 }
 
 function hasClassPseudoRule(object, pseudo) {
@@ -122,6 +150,12 @@ function parseTransitionCSS(value) {
  * @returns {CSSStyleRule|undefined}
  */
 export function getCSSRule(selector) {
+  ensureSelectorRuleCache();
+  if (selectorRuleCache.has(selector)) {
+    return selectorRuleCache.get(selector) || undefined;
+  }
+
+  let found = null;
   for (const sheet of document.styleSheets) {
     let rules;
     try {
@@ -135,11 +169,17 @@ export function getCSSRule(selector) {
       const selectors = rule.selectorText.split(',');
       for (const sel of selectors) {
         if (sel.trim().split(/\s+/).includes(selector)) {
-          return rule;
+          found = rule;
+          break;
         }
       }
+      if (found) break;
     }
+    if (found) break;
   }
+
+  selectorRuleCache.set(selector, found);
+  return found || undefined;
 }
 
 /**

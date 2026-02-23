@@ -1,140 +1,282 @@
 # JailedThreeJS
 
-CSS-first scaffolding for Three.js. Drop a `<cell>` on the page, describe your scene in HTML, tweak it with CSS custom properties, sprinkle behaviour with plain JS. The engine does the wiring (renderer, cameras, raycasters, resize handling) so you can stay inside web platform muscle memory.
+A CSS-first layer on top of Three.js.
 
----
+Define a scene with HTML inside a `<cell>`, style objects with CSS custom properties, and attach behavior with plain JS. JailedThreeJS creates the renderer, scene, cameras, resize handling, and object mapping for you.
 
-## TL;DR
+## What It Does
 
-- **Structure**: Every tag under a `<cell>` becomes its matching `THREE.Object3D` (`<mesh>`, `<group>`, `<perspectivecamera>`, `<axeshelper>`, …).
-- **Style**: Custom properties map to object state: `--position`, `--rotation`, `--scale`, `--geometry`, `--material-color`, `--transition`, etc.
-- **Interact**: Native DOM events (`onclick`, `onmouseover`, `ondblclick`, `oncontextmenu`, …) and pseudo-classes (`:hover`, `:focus`, `:active`) work on meshes.
-- **Animate**: Declare transitions or CSS `@keyframes` and the painter lerps the underlying Three.js values.
-- **Assets**: Reference built-ins (`@cube`, `@plane`, `@sphere`, `@torus`) or define custom `@asset` rules that fetch GLTF/GLB/FBX/textures/audio.
-- **API access**: You can always grab the underlying `Cell`/`THREE.Object3D` to run imperative code when needed.
+- Maps DOM tags to `THREE.Object3D` instances (`<mesh>`, `<group>`, `<perspectivecamera>`, etc.)
+- Applies CSS custom properties to Three.js objects (`--position`, `--rotation`, `--scale`, `--material-*`, ...)
+- Supports DOM-style interaction (`onclick`, `onmouseover`, `ondblclick`, `oncontextmenu`, ...)
+- Supports CSS pseudo-classes on 3D objects (`:hover`, `:focus`, `:active`)
+- Supports transitions and CSS `@keyframes`-driven animation of custom props
+- Supports basic asset references (`@cube`, `@sphere`, `@plane`, `@torus`) plus CSS-defined asset rules
 
+## Identity Mapping (Important)
 
----
+Runtime object identity now maps like this:
+
+- `DOM id` -> `Object3D.name`
+- `DOM class list` -> `Object3D.classList` (compat alias) and `object.userData.classList`
+
+Examples:
+
+- `<mesh id="box" class="hero selected"></mesh>`
+- `convict.name === "box"`
+- `convict.classList` is `['hero', 'selected']`
+
+Notes:
+
+- `convict.classList` is a JailedThreeJS compatibility alias (not native Three.js API).
+- `convict.userData.domId` and `convict.userData.classList` are also maintained.
 
 ## Installation
 
-The repo ships as ES modules. Point your bundler (or `<script type="module">`) to the `dist/` folder.
-
-```html
-<script type="module">
-  import { JThree } from 'dist/index.js';
-  // All <cell> elements are converted on import.
-</script>
+```bash
+npm install
 ```
 
-If you add cells later (e.g. via a framework), call `JThree.init_convert()` to rescan the DOM.
+For local development in this repo:
 
----
+```bash
+npm run dev
+```
 
-## Quick start
+This project uses Vite with `src/` as the root.
+
+## npm Package Usage
+
+Install with `three`:
+
+```bash
+npm install jailedthreejs three
+```
+
+Then import from the package:
+
+```js
+import { JThree, Cell } from 'jailedthreejs';
+```
+
+Package entrypoint notes:
+
+- npm publishes the library build from `dist/lib/`
+- the demo/test page build is separate (`dist/demo/`) and is not the npm entrypoint
+
+## Minimal Example
 
 ```html
-<cell id="demo" style="display:block;width:560px;height:320px;background:#05070f">
-  <perspectivecamera render></perspectivecamera>
-  <mesh id="box" class="box" onclick="spin(this)"></mesh>
+<cell id="demo" style="display:block;width:640px;height:360px">
+  <perspectivecamera id="cam" render></perspectivecamera>
+  <directionallight id="sun"></directionallight>
+  <mesh id="box" class="scene-object hero" onclick="spinBox()"></mesh>
 </cell>
 
 <style>
-  .box {
-    --geometry: @cube;
-    --position: (0,0,-5);
-    --scale: (1,1,1);
-    --material-color: (0.8,0.2,0.2);
-    --transition: 400ms ease-in-out;
+  #cam {
+    --position: (0, 1.5, 5);
   }
-  .box:hover  { --material-color: (0.2,0.8,0.9); }
-  .box:active { --scale: (1.2,1.2,1.2); }
+
+  #sun {
+    --position: (3, 6, 4);
+    --intensity: 2;
+  }
+
+  .scene-object {
+    --geometry: @cube;
+    --position: (0, 0, 0);
+    --material-color: (0.3, 0.7, 1.0);
+    --transition: 200ms ease-out;
+  }
+
+  .scene-object:hover {
+    --scale: (1.08, 1.08, 1.08);
+  }
+
+  .scene-object:active {
+    --scale: (0.96, 0.96, 0.96);
+  }
 </style>
 
 <script type="module">
-  import { Cell } from './dist/index.js';
-  const cell = Cell.getCell(document.getElementById('demo'));
-  const box  = cell.getConvictById('box');
+  import './module/main.js';
+  import Cell from './module/cell.js';
 
-  cell.addUpdateFunction(function () { box.rotation.y += 0.01; });
-  window.spin = (mesh) => mesh.style.setProperty('--rotation-y', box.rotation.y + Math.PI);
+  const cellEl = document.getElementById('demo');
+  const cell = Cell.getCell(cellEl);
+  const box = cell.getConvictById('box');
+
+  window.spinBox = () => {
+    box.rotation.y += Math.PI * 0.25;
+  };
+
+  console.log(box.name);      // "box"
+  console.log(box.classList); // ["scene-object", "hero"]
 </script>
 ```
 
-That is the entire scene: no manual `WebGLRenderer`, no raycaster setup, no resize bookkeeping.
+## How It Works
 
----
+### 1. DOM -> Three.js conversion
 
-## Styling cheat sheet
+Every supported child element inside a `<cell>` is converted into a matching Three.js object.
 
-| Purpose            | Custom property examples                                                       |
-|--------------------|--------------------------------------------------------------------------------|
-| Transform          | `--position: (x,y,z)` · `--rotation: (radX,radY,radZ)` · `--scale: (sx,sy,sz)` |
-| Geometry/material  | `--geometry: @cube` · `--material-color: (r,g,b)` · `--material-roughness: 0.5` |
-| Cameras            | `--fov` · `--near` · `--far` · `--aspect` (auto-updated unless overridden)     |
-| Lights             | `--intensity` · `--distance` · `--color` · `--decay`                          |
-| Transitions        | `--transition: 300ms ease` (or set `object.transition = { duration, timing }`) |
-| Animations         | Use CSS `@keyframes` where frames set the same custom props.                   |
-| Assets             | `--geometry: @MySpaceship` (load via `@MySpaceship { url: './ship.glb'; }`)   |
+- Parent/child DOM nesting becomes scene graph nesting.
+- Cameras can be declared in HTML.
+- The first camera (or one with `render`) becomes the active render camera.
 
-> Any custom property prefixed with `--` is forwarded to the object through a best-effort parser (numbers/arrays/assets/refs). Unknown props are ignored with a console warning.
+### 2. CSS painter
 
----
+Custom properties (`--...`) are parsed and applied to object properties.
+
+Examples:
+
+- `--position: (x,y,z)`
+- `--rotation: (rx,ry,rz)`
+- `--scale: (sx,sy,sz)`
+- `--material-color: (r,g,b)`
+- `--geometry: @cube`
+- `--transition: 250ms ease`
+- `--animation: bob 1.5s infinite ease-in-out`
+
+### 3. Interaction + pseudo-classes
+
+JailedThreeJS raycasts the scene and updates pseudo-state flags so CSS selectors like these work:
+
+- `.button:hover`
+- `.button:active`
+- `#hero:focus`
+
+Supported DOM event attributes on scene elements include:
+
+- `onclick`
+- `onmouseover`
+- `onmousedown`
+- `onmouseup`
+- `ondblclick`
+- `oncontextmenu`
+
+Handler functions receive a synthetic event object containing references to:
+
+- `target3d`
+- `targetCell`
+- `targetElement`
+- `pointerPosition`
+- `originalEvt`
 
 ## Runtime API
 
-| API                 | Description                                                                                                       |
-|---------------------|-------------------------------------------------------------------------------------------------------------------|
-| `JThree.init_convert()` | Rescan the DOM for `<cell>` tags and boot them. Automatically run once on import.                            |
-| `Cell.getCell(element)` | Retrieve the `Cell` controller attached to a `<cell>` DOM node.                                                |
-| `cell.addUpdateFunction(fn)` | Register a per-frame callback (runs inside the render loop).                                            |
-| `cell.getConvictById(id)` / `getConvictByDom(dom)` | Fetch the underlying `THREE.Object3D` created for a DOM element.               |
-| `cell.getConvictsByClass(cls)` | Batch lookup by class name (mirrors `document.getElementsByClassName`).                                 |
-| `cell.removeConvict(object)` | Remove an object and clean up book-keeping.                                                              |
-| `object.transition = { duration, timing }` | Enable JS-driven interpolation for subsequent style changes.                           |
-| `object.animation = { name, duration, iteration }` | Apply a CSS `@keyframes` animation to an object’s custom props.                 |
+### `JThree`
 
-You always have access to the raw `THREE.Object3D` instance (`convict`). Use it for low-level operations, loaders, shaders, etc.
+Imported from `src/module/main.js` (or re-exported by `src/module/index.js`).
 
----
+- `JThree.init_convert()`
+  - Scans the document for `<cell>` elements and converts any not already initialized.
 
-## Events & pseudo-classes
+### `Cell`
 
-- Add DOM event attributes (`onclick`, `onmouseover`, `ondblclick`, `onmousedown`, `onmouseup`, `oncontextmenu`). They receive a synthetic event with `{ target3d, targetCell, pointerPosition, originalEvt }`.
-- Use CSS pseudo-classes (`:hover`, `:focus`, `:active`). The runtime keeps class flags in sync with pointer/click states and repaints affected objects.
-- `object.layers` is managed automatically: pickable meshes are moved to layer 3 only when they need interaction, saving raycast cost.
+- `Cell.getCell(cellElement)`
+  - Returns the `Cell` instance attached to a `<cell>` DOM element.
 
----
+Instance methods:
 
-## Assets & `@rules`
+- `cell.getConvictById(id)`
+  - Returns the Three.js object for a DOM id inside that cell.
+- `cell.getConvictByDom(domElement)`
+  - Returns the mapped Three.js object for a DOM element.
+- `cell.getConvictsByClass(className)`
+  - Returns all mapped objects in that cell with the class.
+- `cell.addUpdateFunction(fn)`
+  - Registers a per-frame callback.
+- `cell.removeUpdateFunction(fn)`
+  - Removes a previously registered callback.
+- `cell.removeConvict(object)`
+  - Removes an object (and descendants) from the scene and mapping.
+- `cell.dispose()`
+  - Cleans up observers, handlers, and canvas.
 
-Declare assets in CSS alongside the rest of your styles:
+## CSS Value Parsing Rules
+
+JailedThreeJS parses custom property values with a best-effort mapper:
+
+- `"(1,2,3)"` -> `[1,2,3]`
+- `"1.25"` -> `1.25`
+- `"@cube"` -> built-in asset/object from the asset cache
+- `"#otherId-position-x"` -> property lookup from another object in the same cell
+
+## Assets
+
+Built-ins are available by default:
+
+- `@cube`
+- `@sphere`
+- `@plane`
+- `@torus`
+
+Custom assets can be declared in CSS-like at-rules:
 
 ```css
-@MySpaceship {
+@Ship {
   url: "./models/ship.glb";
 }
 
 .hero {
-  --geometry: @MySpaceship;
-  --position: (0,0,-10);
+  --geometry: @Ship;
 }
 ```
 
-First time the painter sees `@MySpaceship`, it loads the GLB (or FBX, texture, audio, material JSON), caches it, and applies it wherever referenced. Built-ins `@cube`, `@sphere`, `@plane`, and `@torus` ship for quick sketches.
+Supported loader types include GLTF/GLB, FBX, textures, audio, MTL, and material JSON.
 
----
+## Demo / Test Page
 
+`src/index.html` is a dedicated test/demo page for verifying runtime mapping and interaction behavior.
 
-## Tips & gotchas
+It includes:
 
-- **Inline styles vs stylesheet rules**: inline `style=""` attributes on `<mesh>` nodes work the same as CSS rules. The painter merges them in the order: base class → id → pseudo-class → inline.
-- **Transitions**: if you define `object.transition`, only numeric/array props are animated. Non-numeric values (like `@asset` references) swap instantly.
-- **Async assets**: `--geometry: @MyGLTF` assigns a promise until the loader resolves. The painter applies final values when the promise settles; don’t mutate those props synchronously.
-- **Cleanup**: If you inject scripts that schedule loops/intervals, register a cleanup handler via `registerSceneCleanup(fn)` so the editor or export can dispose them reliably.
+- object selection
+- live DOM `id`/`class` mutation controls
+- runtime readout (`convict.name`, `convict.classList`, `userData.*`)
+- a mapping verification button
 
----
+## Build Outputs
+
+- `npm run build:lib` -> builds the npm library package output to `dist/lib`
+- `npm run build:demo` -> builds the demo page to `dist/demo`
+- `npm run pack:check` -> runs `npm pack --dry-run` to inspect publish contents
+
+## Manual Releases (npm + GitHub)
+
+- Beta releases publish with npm dist-tag `beta`
+- Stable releases publish with npm dist-tag `latest`
+- GitHub Releases are created manually from tags
+See `RELEASE.md` for the step-by-step checklist and command examples.
+
+## Performance Notes (Current)
+
+Recent runtime improvements in this repo include:
+
+- cell-local ID/class lookup indexes (faster `getConvictById` / `getConvictsByClass`)
+- cached CSS selector lookups with style-change invalidation
+- cached keyframe and asset-rule scans with style-change invalidation
+- requestAnimationFrame-throttled pointer-move raycasting
+- targeted repaints for pseudo-state changes instead of full-cell pseudo repaint on each move
+
+## Limitations / Gotchas
+
+- The CSS painter is best-effort and will ignore unsupported custom props.
+- Cross-origin stylesheets may not be readable (`cssRules` access restrictions); those rules are skipped.
+- Async assets resolve later; properties may update after the loader completes.
+- If you mutate object transforms directly in JS, any later CSS repaint can overwrite those values.
+
+## Development Notes
+
+This repo contains the runtime modules and a demo/test page.
+
+- Source + demo live in `src/`
+- npm package build output lives in `dist/lib/`
+- demo build output lives in `dist/demo/`
 
 ## License
 
-MIT © 2025. Use it in games, demos, dashboards, art toys, education—wherever CSS-driven 3D makes sense. Contributions welcome! 
+MIT
