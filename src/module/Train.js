@@ -168,43 +168,78 @@ export function animateLerp(
   durationMs,
   onUpdate,
   onComplete,
-  timingFunction = 'linear'
+  timingFunction = 'linear',
+  signal = null
 ) {
   const isAnimatable = v =>
     typeof v === 'number' || Array.isArray(v);
+  let rafId = 0;
+  let settled = false;
+
+  const finish = (shouldComplete, value = to) => {
+    if (settled) return;
+    settled = true;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    if (signal && onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+    if (shouldComplete && onComplete) {
+      onComplete(value);
+    }
+  };
 
   const finishInstant = () => {
+    if (signal?.aborted) return;
     if (onUpdate) onUpdate(to, 1);
-    if (onComplete) onComplete(to);
+    finish(true, to);
   };
+
+  const onAbort = () => {
+    finish(false);
+  };
+
+  if (signal?.aborted) {
+    return () => {};
+  }
+  if (signal) {
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
 
   if (!isAnimatable(from) || !isAnimatable(to)) {
     finishInstant();
-    return;
+    return () => finish(false);
   }
 
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
     finishInstant();
-    return;
+    return () => finish(false);
   }
 
   const start = performance.now();
   const ease = _get_Equation(timingFunction);
 
   function step(now) {
+    if (settled || signal?.aborted) {
+      finish(false);
+      return;
+    }
     let t = (now - start) / durationMs;
     if (t >= 1) t = 1;
     const easedT = ease(t);
     const value = lerpValue(from, to, easedT, lerpNumber);
     if (onUpdate) onUpdate(value, easedT);
     if (t < 1) {
-      requestAnimationFrame(step);
-    } else if (onComplete) {
-      onComplete(value);
+      rafId = requestAnimationFrame(step);
+    } else {
+      finish(true, value);
     }
   }
 
-  requestAnimationFrame(step);
+  rafId = requestAnimationFrame(step);
+  return () => finish(false);
 }
 
 /**
@@ -249,8 +284,9 @@ function parseKeyframeTime(keyText, totalDuration) {
  *   iteration?: { count?: number | string }
  * }} animationObj
  */
-export async function KeyFrameAnimationLerp(object, animationObj) {
+export async function KeyFrameAnimationLerp(object, animationObj, signal = null) {
   if (!object || !animationObj?.name || !animationObj?.duration) return;
+  if (signal?.aborted) return;
 
   const keyFramesRule = getAnimationMap(animationObj.name);
   if (!keyFramesRule || !keyFramesRule.cssRules) {
@@ -269,6 +305,7 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
 
   const runOnce = async () => {
     for (let i = 0; i < rules.length - 1; i++) {
+      if (signal?.aborted) return;
       const fromRule = rules[i];
       const toRule = rules[i + 1];
       const t0 = parseKeyframeTime(fromRule.keyText, duration);
@@ -299,6 +336,7 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
 
       await Promise.all(
         keys.map(key => {
+          if (signal?.aborted) return Promise.resolve();
           const fromVal = fromProps[key];
           const toVal = toProps[key];
 
@@ -310,16 +348,35 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
 
           return Promise.all([resolveValue(fromVal), resolveValue(toVal)])
             .then(([resolvedFrom, resolvedTo]) => new Promise(resolve => {
+              if (signal?.aborted) {
+                resolve();
+                return;
+              }
+              let done = false;
+              const finish = () => {
+                if (done) return;
+                done = true;
+                if (signal && onAbort) {
+                  signal.removeEventListener('abort', onAbort);
+                }
+                resolve();
+              };
+              const onAbort = () => finish();
+              if (signal) {
+                signal.addEventListener('abort', onAbort, { once: true });
+              }
               animateLerp(
                 resolvedFrom,
                 resolvedTo,
                 segmentMs,
                 v => {
+                  if (signal?.aborted) return;
                   const { parent, key: finalKey } = deep_searchParms(object, key.split('-'));
                   exchange_rule(parent, finalKey, v);
                 },
-                resolve,
-                animationObj.timing?.fun || 'linear'
+                finish,
+                animationObj.timing?.fun || 'linear',
+                signal
               );
             }));
         })
@@ -333,15 +390,14 @@ export async function KeyFrameAnimationLerp(object, animationObj) {
   }
 
   if (iterationCount === Infinity) {
-    // infinite loop – deliberately never resolves
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    while (!signal?.aborted) {
       // eslint-disable-next-line no-await-in-loop
       await runOnce();
     }
   } else {
     const total = Number(iterationCount) || 1;
     for (let i = 0; i < total; i++) {
+      if (signal?.aborted) return;
       // eslint-disable-next-line no-await-in-loop
       await runOnce();
     }

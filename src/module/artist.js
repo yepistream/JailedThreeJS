@@ -50,6 +50,25 @@ function hasClassPseudoRule(object, pseudo) {
   return getObjectClassSelectors(object).some(cls => getCSSRule(`.${cls}${pseudo}`));
 }
 
+function animationConfigKey(animCfg) {
+  if (!animCfg) return null;
+  return [
+    animCfg.name || '',
+    animCfg.duration || 0,
+    animCfg.timing?.fun || 'linear',
+    animCfg.iteration?.count ?? 1
+  ].join('|');
+}
+
+function stopObjectAnimation(object) {
+  const ctrl = object?.userData?._animationAbortController;
+  if (ctrl && typeof ctrl.abort === 'function' && !ctrl.signal?.aborted) {
+    ctrl.abort();
+  }
+  object.userData._animationAbortController = null;
+  object.userData._animationRunning = false;
+}
+
 function parseAnimationCSS(value) {
   if (!value) return null;
 
@@ -307,6 +326,7 @@ function _apply_rule(rule, object, _chosenOne = null) {
 
   const domEl = object.userData.domEl;
   object.userData._lastCSS = object.userData._lastCSS || Object.create(null);
+  let sawAnimationDeclaration = false;
 
   // enable picking layer when interactive / pseudo-rules exist
   if (
@@ -341,7 +361,13 @@ function _apply_rule(rule, object, _chosenOne = null) {
 
   // CSS-driven animation config
   if (rawProp === '--animation') {
+    sawAnimationDeclaration = true;
     const animCfg = parseAnimationCSS(value);
+    const nextAnimKey = animationConfigKey(animCfg);
+    if (object.userData._animationConfigKey !== nextAnimKey) {
+      stopObjectAnimation(object);
+      object.userData._animationConfigKey = nextAnimKey;
+    }
     object.animation = animCfg;    // may be null if "none"
     continue;
   }
@@ -401,20 +427,29 @@ function _apply_rule(rule, object, _chosenOne = null) {
   
 
 
+ if (sawAnimationDeclaration && !object.animation) {
+    stopObjectAnimation(object);
+ }
+
  if (object.animation) {
     // Don't restart the animation every repaint
     if (!object.userData._animationRunning) {
+      const controller = new AbortController();
       object.userData._animationRunning = true;
+      object.userData._animationAbortController = controller;
 
       (async () => {
         try {
-          await KeyFrameAnimationLerp(object, object.animation);
+          await KeyFrameAnimationLerp(object, object.animation, controller.signal);
         } catch (err) {
-          console.error(err);
+          if (!controller.signal.aborted) {
+            console.error(err);
+          }
         } finally {
-          // For infinite animations this never runs, which is fine:
-          // we keep the flag true and never restart.
-          object.userData._animationRunning = false;
+          if (object.userData._animationAbortController === controller) {
+            object.userData._animationAbortController = null;
+            object.userData._animationRunning = false;
+          }
         }
       })();
     }
