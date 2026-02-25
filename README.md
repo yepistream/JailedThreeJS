@@ -1,3 +1,6 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yepistream/JailedThreeJS)
+
+
 # JailedThreeJS
 
 A CSS-first layer on top of Three.js.
