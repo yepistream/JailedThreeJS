@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { getGlobalStyleCacheVersion } from './styleCache.js';
 
 export let AllKeyFramesMap = new Map();
@@ -102,6 +103,12 @@ const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
 const audioLoader = new THREE.AudioLoader();
 const mtlLoader = new MTLLoader();
+const objLoader = new OBJLoader();
+
+function getUrlBasePath(url) {
+  const slash = url.lastIndexOf('/');
+  return slash >= 0 ? url.slice(0, slash + 1) : '';
+}
 
 function storeAssetValue(key, value) {
   if (value && typeof value.then === 'function') {
@@ -268,7 +275,10 @@ export function loadAsset(url) {
         audioLoader.load(url, buffer => res(buffer), undefined, rej)
       );
     case 'mtl':
-      return new Promise((res, rej) =>
+      return new Promise((res, rej) => {
+        const basePath = getUrlBasePath(url);
+        mtlLoader.setPath(basePath);
+        mtlLoader.setResourcePath(basePath);
         mtlLoader.load(
           url,
           mtl => {
@@ -277,8 +287,29 @@ export function loadAsset(url) {
           },
           undefined,
           rej
-        )
-      );
+        );
+      });
+    case 'obj':
+      return new Promise((res, rej) => {
+        const basePath = getUrlBasePath(url);
+        const mtlUrl = url.replace(/\.obj$/i, '.mtl');
+
+        mtlLoader.setPath(basePath);
+        mtlLoader.setResourcePath(basePath);
+        mtlLoader.load(
+          mtlUrl,
+          mtl => {
+            mtl.preload();
+            objLoader.setMaterials(mtl);
+            objLoader.load(url, res, null, rej);
+          },
+          undefined,
+          () => {
+            // If no companion MTL exists, still load the OBJ geometry.
+            objLoader.load(url, res, null, rej);
+          }
+        );
+      });
     case 'json':
       return fetch(url)
         .then(response => response.json())
