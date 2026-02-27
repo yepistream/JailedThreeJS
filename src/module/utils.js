@@ -205,6 +205,13 @@ function gatherAssetRules() {
 }
 
 /**
+ * Prime CSS-declared asset entries before style application.
+ */
+export function gatherAssets() {
+  gatherAssetRules();
+}
+
+/**
  * Get or load an asset by name.
  *
  * Built-ins (auto-registered on first use):

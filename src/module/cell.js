@@ -8,7 +8,7 @@
 // - Per-frame update callbacks
 
 import * as THREE from 'three';
-import { getClassMap } from './utils.js';
+import { gatherAssets, getClassMap } from './utils.js';
 import {
   paintCell,
   paintConvict,
@@ -106,6 +106,9 @@ class Cell {
     cellElm.addEventListener('dblclick', this._boundDoubleClick);
     cellElm.addEventListener('contextmenu', this._boundContextMenu);
 
+    // prime CSS-declared assets before first style apply
+    gatherAssets();
+
     // initial paint
     paintCell(this);
 
@@ -116,6 +119,7 @@ class Cell {
       this._pendingStyleRepaint = true;
       requestAnimationFrame(() => {
         this._pendingStyleRepaint = false;
+        gatherAssets();
         paintCell(this);
         this._repaintKnownConvicts();
       });
@@ -278,6 +282,7 @@ class Cell {
     this._pendingStyleRepaint = true;
     requestAnimationFrame(() => {
       this._pendingStyleRepaint = false;
+      gatherAssets();
       paintCell(this);
       this._repaintKnownConvicts();
     });

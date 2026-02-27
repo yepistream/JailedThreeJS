@@ -7,7 +7,7 @@
 // - Keyframe-driven animations
 // - Pseudo-class painting (:hover, :focus, :active)
 
-import { getAsset } from './utils.js';
+import { gatherAssets, getAsset } from './utils.js';
 import Cell from './cell.js';
 import { animateLerp, KeyFrameAnimationLerp } from './Train.js';
 import * as THREE from 'three';
@@ -463,6 +463,7 @@ function _apply_rule(rule, object, _chosenOne = null) {
  * @param {Cell} cell
  */
 export function paintConvict(convictElm, cell) {
+  gatherAssets();
   const convict = cell._allConvictsByDom.get(convictElm);
   if (convict) {
     _apply_rule(convictElm, convict);
@@ -500,6 +501,7 @@ export function paintExtraCell(muse) {
  * @param {Cell} muse
  */
 export function paintCell(muse) {
+  gatherAssets();
   for (const obj of muse.classyConvicts) {
     for (const cls of getObjectClassSelectors(obj)) {
       const rule = getCSSRule(`.${cls}`);
@@ -519,6 +521,7 @@ export function paintCell(muse) {
  * @param {THREE.Object3D} muse
  */
 export function paintSpecificMuse(muse) {
+  gatherAssets();
   const extra = muse.userData.extraParams || [];
 
   getObjectClassSelectors(muse).forEach(cls => {
