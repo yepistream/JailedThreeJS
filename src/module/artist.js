@@ -7,7 +7,7 @@
 // - Keyframe-driven animations
 // - Pseudo-class painting (:hover, :focus, :active)
 
-import { getAsset } from './utils.js';
+import { gatherAssetRules, getAsset } from './utils.js';
 import Cell from './cell.js';
 import { animateLerp, KeyFrameAnimationLerp } from './Train.js';
 import * as THREE from 'three';
@@ -16,6 +16,8 @@ import { getGlobalStyleCacheVersion } from './styleCache.js';
 let selectorRuleCache = new Map();
 let selectorRuleCacheVersion = -1;
 let warnedLegacyNameClassFallback = false;
+let asyncAssignmentSerial = 0;
+const ASSET_REFERENCE_RE = /^@asset\s*\(\s*([^)]+?)\s*\)$/i;
 
 function ensureSelectorRuleCache() {
   const version = getGlobalStyleCacheVersion();
@@ -67,6 +69,48 @@ function stopObjectAnimation(object) {
   }
   object.userData._animationAbortController = null;
   object.userData._animationRunning = false;
+}
+
+
+
+function coerceAssetToGeometryPayload(assetValue, rawProp) {
+  if (!assetValue) return null;
+
+  if (assetValue.isBufferGeometry) {
+    return { geometry: assetValue, material: null };
+  }
+
+  if (assetValue.geometry?.isBufferGeometry) {
+    return {
+      geometry: assetValue.geometry,
+      material: assetValue.material ?? null
+    };
+  }
+
+  if (assetValue.isObject3D && typeof assetValue.traverse === 'function') {
+    let foundMesh = null;
+    assetValue.traverse(node => {
+      if (!foundMesh && node?.isMesh && node.geometry?.isBufferGeometry) {
+        foundMesh = node;
+      }
+    });
+    if (foundMesh) {
+      return {
+        geometry: foundMesh.geometry,
+        material: foundMesh.material ?? null
+      };
+    }
+  }
+  console.error(`Asset resolved for "${rawProp}" is not a BufferGeometry.`);
+  return null;
+}
+
+function cloneMaterialLike(material) {
+  if (!material) return material;
+  if (Array.isArray(material)) {
+    return material.map(m => (m?.clone ? m.clone() : m));
+  }
+  return material.clone ? material.clone() : material;
 }
 
 function parseAnimationCSS(value) {
@@ -222,7 +266,6 @@ export function deep_searchParms(object, path) {
  *
  * - "(1,2,3)" → [1,2,3]
  * - "1.25"     → 1.25
- * - "@foo"     → asset from getAsset('foo')
  * - "#id-..."  → property copied from another convict in the same cell
  *
  * @param {string} value
@@ -230,22 +273,27 @@ export function deep_searchParms(object, path) {
  * @returns {any}
  */
 export function CSSValueTo3JSValue(value, __object = null) {
+  const normalizedValue = typeof value === 'string' ? value.trim() : value;
+  if (typeof normalizedValue !== 'string') return normalizedValue;
   let parsed;
 
-  if (/^\(.+\)$/.test(value)) {
-    parsed = value.slice(1, -1).split(',').map(v => parseFloat(v.trim()));
-  } else if (!Number.isNaN(parseFloat(value))) {
-    parsed = parseFloat(value);
+  if (/^\(.+\)$/.test(normalizedValue)) {
+    parsed = normalizedValue.slice(1, -1).split(',').map(v => parseFloat(v.trim()));
+  } else if (!Number.isNaN(parseFloat(normalizedValue))) {
+    parsed = parseFloat(normalizedValue);
   } else {
-    parsed = value.replace(/^['"]|['"]$/g, '');
+    parsed = normalizedValue.replace(/^['"]|['"]$/g, '');
   }
 
   if (typeof parsed === 'string') {
+    console.log(parsed);
+    const assetName = parsed;
+    if (getAsset(assetName)) {
+      return getAsset(assetName);
+    }
+
+
     switch (parsed[0]) {
-      case '@': {
-        const p = parsed.slice(1);
-        return getAsset(p);
-      }
       case '#': {
         if (!__object) {
           console.error('CSSValueTo3JSValue: __object is null when resolving', parsed);
@@ -326,6 +374,8 @@ function _apply_rule(rule, object, _chosenOne = null) {
 
   const domEl = object.userData.domEl;
   object.userData._lastCSS = object.userData._lastCSS || Object.create(null);
+  object.userData._pendingAsyncAssignments =
+    object.userData._pendingAsyncAssignments || Object.create(null);
   let sawAnimationDeclaration = false;
 
   // enable picking layer when interactive / pseudo-rules exist
@@ -377,9 +427,31 @@ function _apply_rule(rule, object, _chosenOne = null) {
   const path = prop.split('-');
   const parsed = CSSValueTo3JSValue(value, object);
   const { parent, key } = deep_searchParms(object, path);
+  const referencedAssetName = value;
+  const assignmentToken = ++asyncAssignmentSerial;
+  object.userData._pendingAsyncAssignments[prop] = assignmentToken;
 
   const assignValue = (resolvedValue) => {
+    if (object.userData._pendingAsyncAssignments[prop] !== assignmentToken) {
+      return;
+    }
     if (resolvedValue === undefined) return;
+    if (referencedAssetName && resolvedValue == null) return;
+
+    let finalValue = resolvedValue;
+    if (referencedAssetName && key === 'geometry') {
+      const payload = coerceAssetToGeometryPayload(resolvedValue, rawProp);
+      if (!payload) return;
+      finalValue = payload.geometry;
+
+      if (
+        payload.material &&
+        parent &&
+        (Object.prototype.hasOwnProperty.call(parent, 'material') || parent.isMesh)
+      ) {
+        parent.material = cloneMaterialLike(payload.material);
+      }
+    }
 
     const transition = object.transition;
     const currentRaw = parent[key];
@@ -394,12 +466,12 @@ function _apply_rule(rule, object, _chosenOne = null) {
       transition &&
       duration > 0 &&
       (typeof currentValue === 'number' || Array.isArray(currentValue)) &&
-      (typeof resolvedValue === 'number' || Array.isArray(resolvedValue));
+      (typeof finalValue === 'number' || Array.isArray(finalValue));
 
     if (isAnimatable) {
       animateLerp(
         currentValue,
-        resolvedValue,
+        finalValue,
         duration,
         v => exchange_rule(parent, key, v),
         () => {
@@ -412,7 +484,7 @@ function _apply_rule(rule, object, _chosenOne = null) {
         timingFn
       );
     } else {
-      exchange_rule(parent, key, resolvedValue);
+      exchange_rule(parent, key, finalValue);
     }
   };
 
@@ -463,6 +535,7 @@ function _apply_rule(rule, object, _chosenOne = null) {
  * @param {Cell} cell
  */
 export function paintConvict(convictElm, cell) {
+  gatherAssetRules();
   const convict = cell._allConvictsByDom.get(convictElm);
   if (convict) {
     _apply_rule(convictElm, convict);
@@ -500,6 +573,7 @@ export function paintExtraCell(muse) {
  * @param {Cell} muse
  */
 export function paintCell(muse) {
+  gatherAssetRules();
   for (const obj of muse.classyConvicts) {
     for (const cls of getObjectClassSelectors(obj)) {
       const rule = getCSSRule(`.${cls}`);
@@ -519,6 +593,7 @@ export function paintCell(muse) {
  * @param {THREE.Object3D} muse
  */
 export function paintSpecificMuse(muse) {
+  gatherAssetRules();
   const extra = muse.userData.extraParams || [];
 
   getObjectClassSelectors(muse).forEach(cls => {

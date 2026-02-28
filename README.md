@@ -14,7 +14,7 @@ Define a scene with HTML inside a `<cell>`, style objects with CSS custom proper
 - Supports DOM-style interaction (`onclick`, `onmouseover`, `ondblclick`, `oncontextmenu`, ...)
 - Supports CSS pseudo-classes on 3D objects (`:hover`, `:focus`, `:active`)
 - Supports transitions and CSS `@keyframes`-driven animation of custom props
-- Supports basic asset references (`@cube`, `@sphere`, `@plane`, `@torus`) plus CSS-defined asset rules
+- Supports basic asset references (`cube`, `sphere`, `plane`, `torus`) plus CSS-defined asset rules
 
 ## Identity Mapping (Important)
 
@@ -72,7 +72,7 @@ Package entrypoint notes:
   }
 
   .scene-object {
-    --geometry: @cube;
+    --geometry: cube;
     --position: (0, 0, 0);
     --material-color: (0.3, 0.7, 1.0);
     --transition: 200ms ease-out;
@@ -124,7 +124,7 @@ Examples:
 - `--rotation: (rx,ry,rz)`
 - `--scale: (sx,sy,sz)`
 - `--material-color: (r,g,b)`
-- `--geometry: @cube`
+- `--geometry: cube`
 - `--transition: 250ms ease`
 - `--animation: bob 1.5s infinite ease-in-out`
 
@@ -190,27 +190,27 @@ JailedThreeJS parses custom property values with a best-effort mapper:
 
 - `"(1,2,3)"` -> `[1,2,3]`
 - `"1.25"` -> `1.25`
-- `"@cube"` -> built-in asset/object from the asset cache
+- `"cube"` -> built-in asset/object from the asset cache
 - `"#otherId-position-x"` -> property lookup from another object in the same cell
 
 ## Assets
 
 Built-ins are available by default:
 
-- `@cube`
-- `@sphere`
-- `@plane`
-- `@torus`
+- `cube`
+- `sphere`
+- `plane`
+- `torus`
 
 Custom assets can be declared in CSS-like at-rules:
 
 ```css
-@Ship {
-  url: "./models/ship.glb";
+@Ship{
+  url: "/models/ship.glb";
 }
 
 .hero {
-  --geometry: @Ship;
+  --geometry: Ship;
 }
 ```
 

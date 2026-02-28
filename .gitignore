@@ -137,3 +137,7 @@ dist
 
 bk/*
 man/*
+
+
+# Ignore Testing Files
+src/testing/*
