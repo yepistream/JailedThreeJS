@@ -105,6 +105,16 @@ const audioLoader = new THREE.AudioLoader();
 const mtlLoader = new MTLLoader();
 const objLoader = new OBJLoader();
 
+const pendingStylesheetAssetParses = new Set();
+
+function trackStylesheetParse(promise) {
+  if (!promise || typeof promise.then !== 'function') return;
+  pendingStylesheetAssetParses.add(promise);
+  promise.finally(() => {
+    pendingStylesheetAssetParses.delete(promise);
+  });
+}
+
 function getUrlBasePath(url) {
   const slash = url.lastIndexOf('/');
   return slash >= 0 ? url.slice(0, slash + 1) : '';
@@ -206,12 +216,23 @@ function gatherAssetRules() {
   }
 
   const uniqueLinks = [...new Set(linkSheetsToParse)];
+  if (!gatherAssetRules._linkFetchByVersion) {
+    gatherAssetRules._linkFetchByVersion = new Map();
+  }
+
+  const cacheKeyPrefix = `${styleVersion}|`;
+  for (const key of [...gatherAssetRules._linkFetchByVersion.keys()]) {
+    if (!key.startsWith(cacheKeyPrefix)) {
+      gatherAssetRules._linkFetchByVersion.delete(key);
+    }
+  }
+
   if (uniqueLinks.length) {
-    if (!gatherAssetRules._pendingFetches) gatherAssetRules._pendingFetches = new Set();
     for (const href of uniqueLinks) {
-      if (gatherAssetRules._pendingFetches.has(href)) continue;
-      gatherAssetRules._pendingFetches.add(href);
-      fetch(href)
+      const fetchKey = `${styleVersion}|${href}`;
+      if (gatherAssetRules._linkFetchByVersion.has(fetchKey)) continue;
+
+      const parsePromise = fetch(href)
         .then(resp => (resp.ok ? resp.text() : ''))
         .then(cssText => {
           registerParsedAssetRuleEntries(parseAssetRulesFromText(cssText));
@@ -219,6 +240,9 @@ function gatherAssetRules() {
         .catch(err => {
           console.warn(`Failed to parse stylesheet text for asset rules: ${href}`, err);
         });
+
+      gatherAssetRules._linkFetchByVersion.set(fetchKey, parsePromise);
+      trackStylesheetParse(parsePromise);
     }
   }
 
@@ -252,6 +276,16 @@ export function getAsset(name, path = null) {
   const key = name;
   if (!assetMap.has(key)) {
     if (!path) {
+      if (pendingStylesheetAssetParses.size > 0) {
+        const pending = Promise.allSettled([...pendingStylesheetAssetParses]).then(() => {
+          const resolved = assetMap.get(key);
+          if (resolved !== undefined) return resolved;
+          console.warn(`Asset "${name}" missing and no path supplied.`);
+          return null;
+        });
+        return pending;
+      }
+
       console.warn(`Asset "${name}" missing and no path supplied.`);
       return null;
     }
