@@ -105,6 +105,16 @@ const audioLoader = new THREE.AudioLoader();
 const mtlLoader = new MTLLoader();
 const objLoader = new OBJLoader();
 
+const pendingStylesheetAssetParses = new Set();
+
+function trackStylesheetParse(promise) {
+  if (!promise || typeof promise.then !== 'function') return;
+  pendingStylesheetAssetParses.add(promise);
+  promise.finally(() => {
+    pendingStylesheetAssetParses.delete(promise);
+  });
+}
+
 function getUrlBasePath(url) {
   const slash = url.lastIndexOf('/');
   return slash >= 0 ? url.slice(0, slash + 1) : '';
@@ -128,6 +138,55 @@ function storeAssetValue(key, value) {
   }
 }
 
+function parseAssetRulesFromText(cssText) {
+  if (!cssText || typeof cssText !== 'string') return [];
+
+  const ignoreAtRules = new Set([
+    'media', 'import', 'supports', 'keyframes', 'font-face', 'charset',
+    'namespace', 'page', 'counter-style', 'font-feature-values', 'viewport'
+  ]);
+
+  const assets = [];
+  const atRuleRegex = /@([A-Za-z0-9_-]+)\s*\{([\s\S]*?)\}/g;
+  let match;
+  while ((match = atRuleRegex.exec(cssText)) !== null) {
+    const atName = match[1];
+    if (ignoreAtRules.has(atName.toLowerCase())) continue;
+
+    const body = match[2] || '';
+    const obj = {};
+    body.split(';').forEach(line => {
+      const idx = line.indexOf(':');
+      if (idx <= 0) return;
+      const key = line.slice(0, idx).trim().toLowerCase();
+      const rawValue = line.slice(idx + 1).trim();
+      if (!key || !rawValue) return;
+      obj[key] = rawValue.replace(/^['"(]+|['")]+$/g, '');
+    });
+
+    const url = obj.url;
+    if (!url) continue;
+
+    const name = (obj.name && obj.name.trim())
+      ? obj.name.trim()
+      : atName;
+
+    assets.push({ name, url });
+  }
+
+  return assets;
+}
+
+function registerParsedAssetRuleEntries(entries) {
+  if (!Array.isArray(entries)) return;
+  for (const entry of entries) {
+    if (!entry?.name || !entry?.url) continue;
+    if (!assetMap.has(entry.name)) {
+      storeAssetValue(entry.name, loadAsset(entry.url));
+    }
+  }
+}
+
 /**
  * Scan stylesheets for custom @rules that declare external assets.
  *
@@ -143,61 +202,47 @@ function gatherAssetRules() {
     return;
   }
 
-  const ignoreAtRules = new Set([
-    'media', 'import', 'supports', 'keyframes', 'font-face', 'charset',
-    'namespace', 'page', 'counter-style', 'font-feature-values', 'viewport'
-  ]);
-
+  const linkSheetsToParse = [];
   for (const sheet of document.styleSheets) {
-    let rules;
-    try {
-      rules = sheet.cssRules;
-    } catch {
+    const owner = sheet.ownerNode;
+    if (owner?.nodeName === 'STYLE') {
+      registerParsedAssetRuleEntries(parseAssetRulesFromText(owner.textContent || ''));
       continue;
     }
 
-    for (const rule of rules) {
-      const text = rule.cssText?.trim();
-      if (!text) continue;
+    if (owner?.nodeName === 'LINK' && sheet.href) {
+      linkSheetsToParse.push(sheet.href);
+    }
+  }
 
-      const match = text.match(/^@([A-Za-z0-9_-]+)\s*\{([^}]*)\}/);
-      if (!match) continue;
+  const uniqueLinks = [...new Set(linkSheetsToParse)];
+  if (!gatherAssetRules._linkFetchByVersion) {
+    gatherAssetRules._linkFetchByVersion = new Map();
+  }
 
-      const atName = match[1];
-      if (ignoreAtRules.has(atName.toLowerCase())) continue;
+  const cacheKeyPrefix = `${styleVersion}|`;
+  for (const key of [...gatherAssetRules._linkFetchByVersion.keys()]) {
+    if (!key.startsWith(cacheKeyPrefix)) {
+      gatherAssetRules._linkFetchByVersion.delete(key);
+    }
+  }
 
-      const body = match[2];
-      const obj = {};
-      body.split(';').forEach(line => {
-        const parts = line
-          .split(':')
-          .map(s => s && s.trim())
-          .filter(Boolean);
-        if (parts.length >= 2) {
-          const key = parts[0].toLowerCase();
-          let value = parts[1];
-          value = value.replace(/^['"(]+|['")]+$/g, '');
-          obj[key] = value;
-        }
-      });
+  if (uniqueLinks.length) {
+    for (const href of uniqueLinks) {
+      const fetchKey = `${styleVersion}|${href}`;
+      if (gatherAssetRules._linkFetchByVersion.has(fetchKey)) continue;
 
-      const url = obj.url;
-      if (!url) continue;
+      const parsePromise = fetch(href)
+        .then(resp => (resp.ok ? resp.text() : ''))
+        .then(cssText => {
+          registerParsedAssetRuleEntries(parseAssetRulesFromText(cssText));
+        })
+        .catch(err => {
+          console.warn(`Failed to parse stylesheet text for asset rules: ${href}`, err);
+        });
 
-      let name;
-      if (obj.name && obj.name.trim()) {
-        name = obj.name.trim();
-      } else {
-        name = atName || (() => {
-          const fname = url.split('/').pop() || '';
-          const dot = fname.lastIndexOf('.');
-          return dot >= 0 ? fname.slice(0, dot) : fname;
-        })();
-      }
-
-      if (!assetMap.has(name)) {
-        storeAssetValue(name, loadAsset(url));
-      }
+      gatherAssetRules._linkFetchByVersion.set(fetchKey, parsePromise);
+      trackStylesheetParse(parsePromise);
     }
   }
 
@@ -231,6 +276,16 @@ export function getAsset(name, path = null) {
   const key = name;
   if (!assetMap.has(key)) {
     if (!path) {
+      if (pendingStylesheetAssetParses.size > 0) {
+        const pending = Promise.allSettled([...pendingStylesheetAssetParses]).then(() => {
+          const resolved = assetMap.get(key);
+          if (resolved !== undefined) return resolved;
+          console.warn(`Asset "${name}" missing and no path supplied.`);
+          return null;
+        });
+        return pending;
+      }
+
       console.warn(`Asset "${name}" missing and no path supplied.`);
       return null;
     }
